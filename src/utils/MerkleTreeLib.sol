@@ -185,20 +185,18 @@ library MerkleTreeLib {
             uint256 b;
             uint256 proofLen;
             for (uint256 i; i < count; ++i) {
-                bool f = proofSize == 0;
-                if (!f) {
-                    uint256 sibling = q[b++] ^ 1;
-                    // An unwritten queue slot is still 0 or 1 from marking, whereas
-                    // every sibling here is >= 2. Reading the next slot is in bounds
-                    // even with one pending node, and cannot consume a stale marker.
-                    f = q[b] == sibling;
-                    if (f) {
-                        ++b;
-                    } else {
-                        proof[proofLen++] = tree[sibling - 1];
-                    }
-                    // Siblings have the same parent, so the consumed node need not stay live.
-                    q[c + i] = sibling >> 1;
+                // Complete selections returned above; every remaining hash consumes the queue.
+                uint256 sibling = q[b++] ^ 1;
+                // An unwritten queue slot is still 0 or 1 from marking, whereas
+                // every sibling here is >= 2. Reading the next slot is in bounds
+                // even with one pending node, and cannot consume a stale marker.
+                bool f = q[b] == sibling;
+                // Siblings have the same parent, so the consumed node need not stay live.
+                q[c + i] = sibling >> 1;
+                if (f) {
+                    ++b;
+                } else {
+                    proof[proofLen++] = tree[sibling - 1];
                 }
                 flags[i] = f;
             }
