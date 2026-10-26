@@ -6,6 +6,71 @@ import {Base64} from "../src/utils/Base64.sol";
 import {LibString} from "../src/utils/LibString.sol";
 
 contract Base64Test is SoladyTest {
+    function testExactBufferBoundaries() public {
+        uint8[18] memory lengths =
+            [0, 1, 2, 3, 22, 23, 24, 25, 31, 32, 33, 47, 48, 49, 63, 64, 65, 97];
+        for (uint256 i; i < lengths.length; ++i) {
+            for (uint256 mode; mode < 4; ++mode) {
+                // Each case gets fresh EVM memory, as an independent call would.
+                this.checkBufferBoundary(lengths[i], mode);
+            }
+        }
+    }
+
+    function testBufferBoundary(uint8 n, uint8 mode) public {
+        this.checkBufferBoundary(n % 98, mode % 4);
+    }
+
+    function checkBufferBoundary(uint256 n, uint256 mode) public {
+        bytes memory input = new bytes(n);
+        for (uint256 j; j < n; ++j) {
+            input[j] = bytes1(uint8(j * 37 + n));
+        }
+        bytes32 beforeHash = keccak256(input);
+        bool fileSafe = mode & 1 != 0;
+        bool noPadding = mode & 2 != 0;
+        _brutalizeMemory();
+        _misalignFreeMemoryPointer();
+        string memory encoded = Base64.encode(input, fileSafe, noPadding);
+        _checkMemory(encoded);
+        assertEq(encoded, _referenceEncode(input, fileSafe, noPadding));
+        bytes32 encodedHash = keccak256(bytes(encoded));
+        _brutalizeMemory();
+        _misalignFreeMemoryPointer();
+        bytes memory decoded = Base64.decode(encoded);
+        _checkMemory(decoded);
+        assertEq(decoded, input);
+        assertEq(keccak256(input), beforeHash);
+        assertEq(keccak256(bytes(encoded)), encodedHash);
+        if (n != 0) {
+            decoded[0] = ~decoded[0];
+            assertEq(keccak256(input), beforeHash);
+            assertEq(keccak256(bytes(encoded)), encodedHash);
+        }
+    }
+
+    function _referenceEncode(bytes memory input, bool fileSafe, bool noPadding)
+        private
+        pure
+        returns (string memory)
+    {
+        bytes memory alphabet = fileSafe
+            ? bytes("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_")
+            : bytes("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/");
+        uint256 used = (input.length * 4 + 2) / 3;
+        bytes memory output = new bytes(noPadding ? used : (input.length + 2) / 3 * 4);
+        for (uint256 j; j < used; ++j) {
+            uint256 bit = j * 6;
+            uint256 word = uint256(uint8(input[bit / 8])) << 8;
+            if (bit / 8 + 1 < input.length) word |= uint8(input[bit / 8 + 1]);
+            output[j] = alphabet[(word >> (10 - bit % 8)) & 63];
+        }
+        for (uint256 j = used; j < output.length; ++j) {
+            output[j] = "=";
+        }
+        return string(output);
+    }
+
     function testBase64EncodeEmptyString() public {
         _testBase64Encode("", "");
     }

@@ -4,12 +4,12 @@ pragma solidity ^0.8.4;
 /// @notice Initializable mixin for the upgradeable contracts.
 /// @author Solady (https://github.com/vectorized/solady/blob/main/src/utils/Initializable.sol)
 /// @author Modified from OpenZeppelin (https://github.com/OpenZeppelin/openzeppelin-contracts/tree/master/contracts/proxy/utils/Initializable.sol)
-/// @dev The checked port keeps upstream's slot and its packed word, the initializing bit below
-/// the initialized version, with the same checks, stores and {Initialized} events. The
+/// @dev This port keeps the packed word, the initializing bit below the initialized version,
+/// with the same checks and {Initialized} events. It uses a Solidity mapping keyed by
+/// `_initializableSlot()` rather than writing that slot directly. This layout is for new
+/// deployments and is not compatible with an existing upstream deployment. The
 /// `initializer` guard checks the word it read before it stores the new one, where upstream
-/// stores first; a failed check reverts the store either way. Solidity cannot name the slot,
-/// so two trusted helpers read and write it. Private functions carry the contract's name, so
-/// that the mixin combines with other mixins.
+/// stores first; a failed check reverts the store either way.
 /// @custom:solar-safe memory arithmetic
 abstract contract Initializable {
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
@@ -29,15 +29,11 @@ abstract contract Initializable {
     /// @dev Triggered when the contract has been initialized.
     event Initialized(uint64 version);
 
-    /// @dev `keccak256(bytes("Initialized(uint64)"))`.
-    bytes32 private constant _INITIALIZED_EVENT_SIGNATURE =
-        0xc7f505b2f371ae2175ee4913f4499e1f2633a7b5936321eed1cdaeb6115181d2;
-
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                          STORAGE                           */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
 
-    /// @dev The default initializable slot is given by:
+    /// @dev The default initializer namespace is given by:
     /// `bytes32(~uint256(uint32(bytes4(keccak256("_INITIALIZABLE_SLOT")))))`.
     ///
     /// Bits Layout:
@@ -45,6 +41,8 @@ abstract contract Initializable {
     /// - [1..64] `initializedVersion`
     bytes32 private constant _INITIALIZABLE_SLOT =
         0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffbf601132;
+
+    mapping(bytes32 => uint256) private _initializableStates;
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                        CONSTRUCTOR                         */
@@ -61,6 +59,7 @@ abstract contract Initializable {
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
 
     /// @dev Override to return a non-zero custom storage slot if required.
+    /// In this port the returned value selects a mapping key, not a physical storage slot.
     function _initializableSlot() internal pure virtual returns (bytes32) {
         return _INITIALIZABLE_SLOT;
     }
@@ -163,21 +162,13 @@ abstract contract Initializable {
     /*                      PRIVATE HELPERS                       */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
 
-    /// @dev The word in storage slot `slot`. Solidity cannot name a slot it did not allocate.
-    /// @custom:solar-trusted
+    /// @dev The packed state for the initializer namespace `slot`.
     function _initializableSload(bytes32 slot) private view returns (uint256 value) {
-        /// @solidity memory-safe-assembly
-        assembly {
-            value := sload(slot)
-        }
+        value = _initializableStates[slot];
     }
 
-    /// @dev Stores `value` in storage slot `slot`.
-    /// @custom:solar-trusted
+    /// @dev Stores `value` for the initializer namespace `slot`.
     function _initializableSstore(bytes32 slot, uint256 value) private {
-        /// @solidity memory-safe-assembly
-        assembly {
-            sstore(slot, value)
-        }
+        _initializableStates[slot] = value;
     }
 }

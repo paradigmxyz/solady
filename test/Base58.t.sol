@@ -7,6 +7,33 @@ import {LibString} from "../src/utils/LibString.sol";
 import {LibBytes} from "../src/utils/LibBytes.sol";
 
 contract Base58Test is SoladyTest {
+    function testExactBufferBoundaries() public {
+        for (uint256 n; n <= 65; ++n) {
+            bytes memory input = new bytes(n);
+            for (uint256 j; j < n; ++j) {
+                input[j] = bytes1(uint8(j * 37 + n));
+            }
+            bytes32 beforeHash = keccak256(input);
+            _brutalizeMemory();
+            _misalignFreeMemoryPointer();
+            string memory encoded = Base58.encode(input);
+            _checkMemory(encoded);
+            bytes32 encodedHash = keccak256(bytes(encoded));
+            _brutalizeMemory();
+            _misalignFreeMemoryPointer();
+            bytes memory decoded = Base58.decode(encoded);
+            _checkMemory(decoded);
+            assertEq(decoded, input);
+            assertEq(keccak256(input), beforeHash);
+            assertEq(keccak256(bytes(encoded)), encodedHash);
+            if (n != 0) {
+                decoded[0] = ~decoded[0];
+                assertEq(keccak256(input), beforeHash);
+                assertEq(keccak256(bytes(encoded)), encodedHash);
+            }
+        }
+    }
+
     function testBase58DecodeRevertsIfInvalidCharacter(bytes1 c) public {
         if (isValidBase58Character(c)) {
             this.base58DecodeRevertsIfInvalidCharacter(c);
@@ -260,40 +287,22 @@ contract Base58Test is SoladyTest {
     }
 
     function testDecodeWordLowCharacterReverts() public {
-        // 0 - 48 (before '1')
-        for (uint256 i = 0; i < 48; i++) {
-            vm.expectRevert(Base58.Base58DecodingError.selector);
-            this.decodeWord(LibString.toHexString(i));
+        for (uint256 i; i < 256; ++i) {
+            bytes1 c = bytes1(uint8(i));
+            if (isValidBase58Character(c)) continue;
+            // The port preserves the empty failure data for a table underflow.
+            // Pass the actual byte, not its ASCII hexadecimal representation.
+            bytes memory expected =
+                i < 49 ? bytes("") : abi.encodeWithSelector(Base58.Base58DecodingError.selector);
+            for (uint256 prefix; prefix < 2; ++prefix) {
+                string memory input =
+                    string(prefix == 0 ? abi.encodePacked(c) : abi.encodePacked("z", c));
+                (bool success, bytes memory data) =
+                    address(this).call(abi.encodeWithSelector(this.decodeWord.selector, input));
+                assertFalse(success);
+                assertEq(data, expected);
+            }
         }
-        // 58 - 64 (: ; < = > ? @)
-        for (uint256 i = 58; i <= 64; ++i) {
-            vm.expectRevert(Base58.Base58DecodingError.selector);
-            this.decodeWord(LibString.toHexString(i));
-        }
-        vm.expectRevert(Base58.Base58DecodingError.selector);
-        this.decodeWord("I");
-        vm.expectRevert(Base58.Base58DecodingError.selector);
-        this.decodeWord("O");
-        // 91 - 96 ([ \ ] ^ _ `)
-        for (uint256 i = 91; i <= 96; ++i) {
-            vm.expectRevert(Base58.Base58DecodingError.selector);
-            this.decodeWord(LibString.toHexString(i));
-        }
-        vm.expectRevert(Base58.Base58DecodingError.selector);
-        this.decodeWord("l");
-
-        // 123 - 127 ({ | } ~ DEL)
-        for (uint256 i = 123; i <= 255; ++i) {
-            vm.expectRevert(Base58.Base58DecodingError.selector);
-            this.decodeWord(LibString.toHexString(i));
-        }
-        vm.expectRevert(Base58.Base58DecodingError.selector);
-        this.decodeWord("\x00");
-
-        // Also cover an underflowing byte after a valid character, where
-        // `result` is already nonzero (loop position > 0).
-        vm.expectRevert(Base58.Base58DecodingError.selector);
-        this.decodeWord("z0");
     }
 
     function decodeWord(string memory encoded) public pure returns (bytes32) {

@@ -14,6 +14,38 @@ contract InitializableTest is SoladyTest {
         m = new MockInitializable(a);
     }
 
+    function testCustomNamespace() public {
+        MockInitializable.Args memory a;
+        m = new NamespacedInitializable(a);
+        a.x = 123;
+        m.initialize(a);
+        assertEq(m.x(), 123);
+        _checkVersion(1);
+        a.version = 2;
+        m.reinitialize(a);
+        _checkVersion(2);
+        m.disableInitializers();
+        _checkVersion(type(uint64).max);
+    }
+
+    function testZeroNamespaceReverts() public {
+        MockInitializable.Args memory a;
+        vm.expectRevert();
+        new ZeroNamespaceInitializable(a);
+    }
+
+    function testNestedConstructorInitializer() public {
+        MockInitializable.Args memory a;
+        a.initializeMulti = true;
+        a.recurse = true;
+        a.checkOnlyDuringInitializing = true;
+        a.x = 2;
+        m = new MockInitializable(a);
+        _checkVersion(1);
+        assertEq(m.x(), 2);
+        assertEq(m.y(), 3);
+    }
+
     function _args() internal returns (MockInitializable.Args memory a) {
         a.x = _random();
         a.version = uint64(_bound(_random(), 1, type(uint64).max));
@@ -156,5 +188,21 @@ contract InitializableTest is SoladyTest {
             computed := iszero(lt(and(i, 1), lt(shr(1, i), version)))
         }
         assertEq(computed, expected);
+    }
+}
+
+contract NamespacedInitializable is MockInitializable {
+    constructor(Args memory a) MockInitializable(a) {}
+
+    function _initializableSlot() internal pure override returns (bytes32) {
+        return bytes32(uint256(42));
+    }
+}
+
+contract ZeroNamespaceInitializable is MockInitializable {
+    constructor(Args memory a) MockInitializable(a) {}
+
+    function _initializableSlot() internal pure override returns (bytes32) {
+        return bytes32(0);
     }
 }

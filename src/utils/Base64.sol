@@ -8,10 +8,11 @@ pragma solidity ^0.8.4;
 /// @dev The checked port works a word at a time in both directions without a lookup table: `encode`
 /// turns twenty-four bytes into thirty-two characters and `decode` thirty-two characters into
 /// twenty-four bytes with arithmetic on every byte of a word at once, the input's tail read as one
-/// shorter word. The output is written in whole words, zeros past its end, and cut to its length
-/// with the trusted `_setLength`, since Solidity cannot shorten a buffer; an output of at most a
-/// word is built in one fresh word. `encode` writes the standard alphabet with padding, or the
-/// URL-safe one and no padding on request. `decode` accepts the documented standard, URL and IMAP
+/// shorter word. Output buffers have their final length from allocation, with bounded writes
+/// at the tail. An ABI round trip provides zero padding without changing an object's length.
+/// An output of at most a word is decoded from an ABI tuple. `encode` writes the standard
+/// alphabet with padding, or the URL-safe one and no padding on request. `decode` accepts the
+/// documented standard, URL and IMAP
 /// alphabets and padding modes. One deliberate difference: where upstream's output is undefined,
 /// `decode` reverts with `InvalidBase64()`: on a character outside those alphabets, padding
 /// anywhere but the end of a padded input, or a length no encoding has. It does not reject unused
@@ -35,20 +36,17 @@ library Base64 {
         if (n <= 24) {
             if (n == 0) return result;
             // All of it is one shorter word, zeros past its bytes, and the
-            // output one word, built in a fresh word and cut to its length:
+            // output one word, decoded with its final length:
             // the characters the bytes need, then padding to a multiple of four.
             uint256 used = (n * 4 + 2) / 3;
             uint256 total = noPadding ? used : (n + 2) / 3 * 4;
             uint256 chars = _encodeWord(uint256(_readBytesN(data, 0, n & 31)) >> 64, fileSafe);
-            result = string(abi.encodePacked(_padded(chars, used, total)));
-            _setLength(bytes(result), total);
-            return result;
+            return string(_fromWord(_padded(chars, used, total), total));
         }
         // Four characters for every three bytes, the last group padded to
         // four unless `noPadding`.
         uint256 length = noPadding ? (n * 4 + 2) / 3 : (n + 2) / 3 * 4;
-        // Whole words of output, the last one cut to the length at the end.
-        bytes memory out = new bytes(((length - 1) | 31) + 1);
+        bytes memory out = _newBytes(length);
         uint256 i;
         uint256 j;
         // Twenty-four bytes are thirty-two characters, one word of output.
@@ -64,9 +62,10 @@ library Base64 {
             // the output keeps the characters the bytes need, then padding.
             uint256 rest = n - i;
             uint256 chars = _encodeWord(uint256(_readBytesN(data, i, rest)) >> 64, fileSafe);
-            _writeBytes32(out, j, bytes32(_padded(chars, (rest * 4 + 2) / 3, length - j)));
+            _writeBytesN(
+                out, j, bytes32(_padded(chars, (rest * 4 + 2) / 3, length - j)), length - j
+            );
         }
-        _setLength(out, length);
         return string(out);
     }
 
@@ -112,27 +111,22 @@ library Base64 {
         if (n < 32) {
             if (n == 0) return result;
             // All of it is one shorter word filled up with `A`, which decodes to
-            // zero bits, and the output one word, built in a fresh word and cut
-            // to its length.
+            // zero bits, and the output one word, decoded with its final length.
             (uint256 packed, uint256 invalid) =
                 _decodeWord(uint256(_readBytesN(input, 0, n & 31)) | (LETTER_A >> (n << 3)));
             if (invalid != 0) revert InvalidBase64();
-            result = abi.encodePacked(packed & ~(type(uint256).max >> (length << 3)));
-            _setLength(result, length);
-            return result;
+            return _fromWord(packed & ~(type(uint256).max >> (length << 3)), length);
         }
-        // Whole words with room for a word written at the last byte, cut to
-        // the length at the end, so the bytes past it stay zero.
-        result = new bytes((length + 62) & ~uint256(31));
+        result = _newBytes(length);
         uint256 bad;
         uint256 i;
         uint256 j;
-        // Thirty-two characters are twenty-four bytes. The word written
-        // carries eight zero bytes more, which the next step overwrites.
+        // Thirty-two characters are twenty-four bytes. Write only those bytes,
+        // leaving the padding untouched and staying within the allocated length.
         while (i + 32 <= n) {
             (uint256 packed, uint256 invalid) = _decodeWord(uint256(_readBytes32(input, i)));
             bad |= invalid;
-            _writeBytes32(result, j, bytes32(packed));
+            _writeBytesN(result, j, bytes32(packed), 24);
             i += 32;
             j += 24;
         }
@@ -144,11 +138,9 @@ library Base64 {
             uint256 word = uint256(_readBytesN(input, i, rest)) | (LETTER_A >> (rest << 3));
             (uint256 packed, uint256 invalid) = _decodeWord(word);
             bad |= invalid;
-            uint256 keep = ((rest * 6) >> 3) << 3;
-            _writeBytes32(result, j, bytes32(packed & ~(type(uint256).max >> keep)));
+            _writeBytesN(result, j, bytes32(packed), length - j);
         }
         if (bad != 0) revert InvalidBase64();
-        _setLength(result, length);
     }
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
@@ -360,16 +352,27 @@ library Base64 {
         }
     }
 
-    /// @dev Shrinks `b` to its first `n` bytes in place. The caller has cleared the bytes
-    /// past `n` in its last word, so they read as zero padding. Solidity cannot spell a
-    /// shorter length for an existing buffer.
-    /// @custom:solar-trusted
+    /// @dev Writes the leading `count` bytes of `value`, at most a word, to `b` at `offset`.
     /// @custom:solar-inline
-    function _setLength(bytes memory b, uint256 n) private pure {
-        if (n > b.length) n = new uint256[](0)[0];
-        /// @solidity memory-safe-assembly
-        assembly {
-            mstore(b, n)
+    function _writeBytesN(bytes memory b, uint256 offset, bytes32 value, uint256 count)
+        private
+        pure
+    {
+        for (uint256 k; k < count; ++k) {
+            b[offset + k] = value[k];
         }
+    }
+
+    /// @dev Decodes a single ABI bytes value. `n <= 32` and `word` is zero after `n` bytes.
+    /// @custom:solar-inline
+    function _fromWord(uint256 word, uint256 n) private pure returns (bytes memory) {
+        return abi.decode(abi.encode(uint256(32), n, word), (bytes));
+    }
+
+    /// @dev Allocates the final length with zero padding through an ABI round trip.
+    /// Legacy solc's `new bytes(n)` alone may leave dirty bytes after the last element.
+    /// @custom:solar-inline
+    function _newBytes(uint256 n) private pure returns (bytes memory) {
+        return abi.decode(abi.encode(new bytes(n)), (bytes));
     }
 }

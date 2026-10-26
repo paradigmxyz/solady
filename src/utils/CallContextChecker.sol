@@ -4,11 +4,9 @@ pragma solidity ^0.8.4;
 /// @notice Call context checker mixin.
 /// @author Solady (https://github.com/vectorized/solady/blob/main/src/utils/CallContextChecker.sol)
 ///
-/// The checked port reads the first word of the current account's code, zero-padded past
-/// its end as the assembly reads it, with a trusted helper, since Solidity can only copy all
-/// of an account's code. The checks compare it and the immutable in Solidity, and revert
-/// with the custom error. The helper's name carries a `_callContextChecker` prefix, so that a
-/// contract can inherit this alongside other ports.
+/// This port reads the current account's code through Solidity's `address.code` and checks
+/// its prefix. Unlike upstream's partial code copy, this copies the whole code into memory.
+/// The checks compare it and the immutable in Solidity and revert with the custom error.
 /// @custom:solar-safe memory arithmetic
 contract CallContextChecker {
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
@@ -41,7 +39,8 @@ contract CallContextChecker {
     function _onEIP7702Authority() internal view virtual returns (bool result) {
         // Note: Checking that it starts with hex"ef01" is the most general and futureproof.
         // 7702 bytecode is `abi.encodePacked(hex"ef01", uint8(version), address(delegation))`.
-        result = bytes2(_callContextCheckerCodeWord(address(this))) == 0xef01;
+        bytes memory code = address(this).code;
+        result = code.length >= 2 && code[0] == 0xef && code[1] == 0x01;
     }
 
     /// @dev Returns the implementation of this contract.
@@ -96,16 +95,5 @@ contract CallContextChecker {
     /// @custom:solar-terminates
     function _revertUnauthorizedCallContext() private pure {
         revert UnauthorizedCallContext();
-    }
-
-    /// @dev The first 32 bytes of `target`'s code, zero-padded past its end as `EXTCODECOPY`
-    /// pads them. Solidity can only copy all of an account's code.
-    /// @custom:solar-trusted
-    function _callContextCheckerCodeWord(address target) private view returns (bytes32 word) {
-        /// @solidity memory-safe-assembly
-        assembly {
-            extcodecopy(target, 0x00, 0x00, 0x20)
-            word := mload(0x00)
-        }
     }
 }

@@ -12,10 +12,10 @@ pragma solidity ^0.8.4;
 /// into each byte's top bit pick the characters. `decode` finds the digits of 32 characters
 /// a word with the same carries, joins them in pairs, fours and so on into a digit in base
 /// `58 ** 32`, and builds the number in 64-bit limbs by Horner's rule; `decodeWord` builds
-/// it in a word, checking for overflow a group at a time. The one trusted helper,
-/// `_truncate`, shortens a new buffer allocated in whole words, so that the bytes after a
-/// result are zero under every compiler, as upstream zeroes them. At a character below `1`,
-/// upstream's `decodeWord` reads its table below zero and runs out of gas; the port reverts
+/// it in a word, checking for overflow a group at a time. Buffers have their final length
+/// from allocation, and an ABI round trip zeroes their padding without assembly. At a
+/// character below `1`, upstream's `decodeWord` reads its table below zero and runs out of
+/// gas; the port reverts
 /// there with no data, as an out-of-gas call does.
 /// @custom:solar-safe memory arithmetic
 library Base58 {
@@ -320,23 +320,11 @@ library Base58 {
         }
     }
 
-    /// @dev A new buffer of `n` zero bytes, its last word zero past them. It is allocated in
-    /// whole words and shortened, as solc's legacy code generator zeroes only the `n` bytes
-    /// of a `new bytes(n)`, where upstream zeroes the rest of the last word too.
+    /// @dev A new buffer of `n` zero bytes, with zero padding from an ABI round trip.
+    /// Legacy solc's `new bytes(n)` alone may leave dirty bytes after the last element.
+    /// @custom:solar-inline
     function _newBytes(uint256 n) private pure returns (bytes memory b) {
-        b = new bytes((n + 31) & ~uint256(31));
-        _truncate(b, n);
-    }
-
-    /// @dev Shrinks `b` to its first `n` bytes in place. Solidity cannot spell a shorter length
-    /// for an existing buffer.
-    /// @custom:solar-trusted
-    function _truncate(bytes memory b, uint256 n) private pure {
-        if (n > b.length) n = new uint256[](0)[0];
-        /// @solidity memory-safe-assembly
-        assembly {
-            mstore(b, n)
-        }
+        b = abi.decode(abi.encode(new bytes(n)), (bytes));
     }
 
     /// @dev The 32 bytes of `b` at `offset`.

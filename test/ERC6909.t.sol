@@ -22,6 +22,53 @@ contract ERC6909Test is SoladyTest {
         token = new MockERC6909();
     }
 
+    function testSelfTransferAtMaximumBalance() public {
+        token.mint(address(this), 1, type(uint256).max);
+        assertTrue(token.transfer(address(this), 1, type(uint256).max));
+        assertEq(token.balanceOf(address(this), 1), type(uint256).max);
+        token.approve(address(this), 1, 17);
+        assertTrue(token.transferFrom(address(this), address(this), 1, 17));
+        assertEq(token.balanceOf(address(this), 1), type(uint256).max);
+        assertEq(token.allowance(address(this), address(this), 1), 0);
+    }
+
+    function testStorageDomainsStaySeparate() public {
+        address other = address(0xBEEF);
+        token.mint(address(this), 1, 100);
+        token.mint(address(this), 2, 200);
+        token.mint(other, 1, 300);
+        token.approve(other, 1, 11);
+        token.approve(other, 2, 22);
+        token.setOperator(other, true);
+        vm.prank(other);
+        token.transferFrom(address(this), other, 1, 10);
+        assertEq(token.balanceOf(address(this), 1), 90);
+        assertEq(token.balanceOf(address(this), 2), 200);
+        assertEq(token.balanceOf(other, 1), 310);
+        assertEq(token.balanceOf(other, 2), 0);
+        assertEq(token.allowance(address(this), other, 1), 11);
+        assertEq(token.allowance(address(this), other, 2), 22);
+        assertFalse(token.isOperator(other, address(this)));
+        token.setOperator(other, false);
+        vm.prank(other);
+        token.transferFrom(address(this), other, 2, 22);
+        assertEq(token.allowance(address(this), other, 2), 0);
+        assertEq(token.allowance(address(this), other, 1), 11);
+    }
+
+    function testOverflowRollsBackAllowanceAndDebit() public {
+        address from = address(0xABCD);
+        address to = address(0xBEEF);
+        token.mint(from, 1, 10);
+        token.mint(to, 1, type(uint256).max);
+        token.directApprove(from, address(this), 1, 10);
+        vm.expectRevert(ERC6909.BalanceOverflow.selector);
+        token.transferFrom(from, to, 1, 10);
+        assertEq(token.allowance(from, address(this), 1), 10);
+        assertEq(token.balanceOf(from, 1), 10);
+        assertEq(token.balanceOf(to, 1), type(uint256).max);
+    }
+
     function testMetadata(uint256 id) public {
         assertEq(token.name(id), "Solady Token");
         assertEq(token.symbol(id), "ST");

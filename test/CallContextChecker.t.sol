@@ -65,3 +65,28 @@ contract CallContextCheckerTest is SoladyTest {
         impl1.upgradeToAndCall(address(1), bytes(""));
     }
 }
+
+contract CallContextPrefixTest is SoladyTest, CallContextChecker {
+    function testCodePrefix(bytes memory code) public {
+        bool expected = code.length >= 2 && code[0] == 0xef && code[1] == 0x01;
+        // REVM rejects malformed delegation designators when installing code.
+        // Exercise valid delegations separately below.
+        vm.assume(!expected);
+        _testPrefix(code, expected);
+    }
+
+    function testShortCodePrefixes() public {
+        _testPrefix(hex"", false);
+        _testPrefix(hex"ef", false);
+        _testPrefix(hex"ef00", false);
+        _testPrefix(abi.encodePacked(hex"ef0100", address(0xBEEF)), true);
+    }
+
+    function _testPrefix(bytes memory code, bool expected) private {
+        bytes memory original = address(this).code;
+        vm.etch(address(this), code);
+        bool result = _onEIP7702Authority();
+        vm.etch(address(this), original);
+        assertEq(result, expected);
+    }
+}
