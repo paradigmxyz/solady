@@ -222,7 +222,7 @@ def unsafe_nodes(node):
             yield from unsafe_nodes(value)
 
 
-def safety_violations(output, *, assembly_free=False):
+def safety_violations(output, *, assembly_free=False, allow_unchecked=False):
     # The port has no compiler-owned library. Capabilities with no Solidity
     # spelling (shrinking an array in place, a raw revert, creating code from
     # bytes, arbitrary storage slots) stay in small declarations tagged
@@ -236,7 +236,8 @@ def safety_violations(output, *, assembly_free=False):
         (path, node["nodeType"])
         for path, source in output["sources"].items()
         for node in nodes(source["ast"])
-        if not assembly_free or node.get("nodeType") == "InlineAssembly"
+        if (not assembly_free or node.get("nodeType") == "InlineAssembly")
+        and (not allow_unchecked or node.get("nodeType") != "UncheckedBlock")
     ]
 
 

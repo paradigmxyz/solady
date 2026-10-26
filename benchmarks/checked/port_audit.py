@@ -22,7 +22,8 @@ audit checks:
   older solc that compiles the original must also compile the port;
 - safety: no inline assembly or `unchecked` block outside a declaration
   tagged `@custom:solar-trusted`, in the port or anything it imports;
-  with `--assembly-free`, unchecked arithmetic is allowed, but inline
+  `--allow-unchecked` permits unchecked arithmetic while retaining the
+  assembly policy above; with `--assembly-free`, unchecked is allowed, but inline
   assembly is rejected even in trusted declarations;
 - mixins: no two ported contracts define a private function with the same
   name and parameter types, which a contract inheriting both could not
@@ -365,7 +366,13 @@ def run(args):
             for name in trusted:
                 print(f"     trusted {name.split(':', 1)[1]}")
 
-    violations = safety_violations({"sources": port}, assembly_free=args.assembly_free)
+    if args.allow_unchecked:
+        print("POLICY: unchecked arithmetic allowed; assembly policy unchanged")
+    violations = safety_violations(
+        {"sources": port},
+        assembly_free=args.assembly_free,
+        allow_unchecked=args.allow_unchecked,
+    )
     for path, kind in violations:
         scope = "" if args.assembly_free else " outside a declaration tagged @custom:solar-trusted"
         print(f"UNSAFE {path}: {kind}{scope}")
@@ -420,6 +427,11 @@ def main():
         "--assembly-free",
         action="store_true",
         help="reject all inline assembly, including trusted code, and allow unchecked arithmetic",
+    )
+    parser.add_argument(
+        "--allow-unchecked",
+        action="store_true",
+        help="allow unchecked arithmetic without changing the assembly policy",
     )
     parser.add_argument(
         "--allow-struct-change",

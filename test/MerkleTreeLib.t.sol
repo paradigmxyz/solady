@@ -218,6 +218,53 @@ contract MerkleTreeLibTest is SoladyTest {
     function testMultiProofMatchesQueue(uint256 n, uint256 selected) public {
         n = 1 + n % 32;
         selected = (selected & ((uint256(1) << n) - 1)) | 1;
+        _checkMultiProof(n, selected);
+    }
+
+    function testMultiProofAllSmallSubsets() public {
+        for (uint256 n = 1; n <= 8; ++n) {
+            for (uint256 selected = 1; selected < uint256(1) << n; ++selected) {
+                // A separate call bounds the temporary memory across the exhaustive sweep.
+                this.checkMultiProof(n, selected);
+            }
+        }
+    }
+
+    function checkMultiProof(uint256 n, uint256 selected) external {
+        _checkMultiProof(n, selected);
+    }
+
+    function testMultiProofInvalidIndices() public {
+        bytes32[] memory t = new bytes32[](5);
+        uint256[] memory indices = new uint256[](2);
+        vm.expectRevert(MerkleTreeLib.MerkleTreeInvalidLeafIndices.selector);
+        this.rawProof(t, indices);
+        indices[0] = 1;
+        vm.expectRevert(MerkleTreeLib.MerkleTreeInvalidLeafIndices.selector);
+        this.rawProof(t, indices);
+        indices[1] = 3;
+        vm.expectRevert(MerkleTreeLib.MerkleTreeOutOfBoundsAccess.selector);
+        this.rawProof(t, indices);
+        indices = new uint256[](1);
+        indices[0] = type(uint256).max;
+        vm.expectRevert(MerkleTreeLib.MerkleTreeOutOfBoundsAccess.selector);
+        this.rawProof(t, indices);
+        indices[0] = 0;
+        vm.expectRevert(MerkleTreeLib.MerkleTreeOutOfBoundsAccess.selector);
+        this.rawProof(new bytes32[](0), indices);
+        vm.expectRevert(abi.encodeWithSignature("Panic(uint256)", 0x32));
+        this.rawProof(new bytes32[](2), indices);
+    }
+
+    function rawProof(bytes32[] memory t, uint256[] memory indices)
+        external
+        pure
+        returns (bytes32[] memory, bool[] memory)
+    {
+        return t.multiProofForLeaves(indices);
+    }
+
+    function _checkMultiProof(uint256 n, uint256 selected) private {
         bytes32[] memory leaves = new bytes32[](n);
         uint256 count;
         for (uint256 i; i < n; ++i) {

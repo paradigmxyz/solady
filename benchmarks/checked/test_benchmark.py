@@ -176,6 +176,44 @@ class SafetyAuditTests(unittest.TestCase):
         output = {"sources": {"src/Wrap.sol": {"ast": {"nodeType": "UncheckedBlock"}}}}
         self.assertEqual(benchmark.safety_violations(output, assembly_free=True), [])
 
+    def test_allow_unchecked_still_checks_nested_assembly(self):
+        output = {
+            "sources": {
+                "src/Wrap.sol": {
+                    "ast": {
+                        "nodeType": "UncheckedBlock",
+                        "statements": [{"nodeType": "InlineAssembly"}],
+                    }
+                }
+            }
+        }
+        self.assertEqual(
+            benchmark.safety_violations(output, allow_unchecked=True),
+            [("src/Wrap.sol", "InlineAssembly")],
+        )
+        self.assertEqual(
+            benchmark.safety_violations(output),
+            [("src/Wrap.sol", "UncheckedBlock"), ("src/Wrap.sol", "InlineAssembly")],
+        )
+
+    def test_allow_unchecked_does_not_weaken_strict_assembly_audit(self):
+        output = {
+            "sources": {
+                "src/Trusted.sol": {
+                    "ast": {
+                        "nodeType": "ContractDefinition",
+                        "documentation": {"text": "@custom:solar-trusted"},
+                        "nodes": [{"nodeType": "InlineAssembly"}],
+                    }
+                }
+            }
+        }
+        self.assertEqual(benchmark.safety_violations(output, allow_unchecked=True), [])
+        self.assertEqual(
+            benchmark.safety_violations(output, assembly_free=True, allow_unchecked=True),
+            [("src/Trusted.sol", "InlineAssembly")],
+        )
+
     def test_a_mention_of_the_tag_is_not_the_tag(self):
         prose = {"nodeType": "StructuredDocumentation", "text": "Not `@custom:solar-trusted` here."}
         node = {"nodeType": "FunctionDefinition", "documentation": prose}

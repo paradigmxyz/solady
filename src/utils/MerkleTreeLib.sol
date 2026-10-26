@@ -15,15 +15,15 @@ pragma solidity ^0.8.4;
 ///   Equivalence is NOT required if you are just using this for pure Solidity testing.
 ///   May be relevant for differential testing between Solidity vs external libraries.
 ///
-/// The checked port builds and reads the tree with checked indexing, and hashes each pair as
-/// `keccak256(abi.encode(min, max))`, the words the assembly hashes in scratch space.
-/// `nodeProof` counts a node's depth before it allocates the proof. `multiProofForLeaves`
-/// checks the leaf indices first, then records proof steps in consumed queue slots. It
-/// allocates exact-sized results and emits those steps without traversing the tree again.
-/// Single-leaf and whole-tree proofs bypass the queue. A sibling past
-/// the end of `tree`, which only a tree of even length has, reverts with `Panic(0x32)` where
-/// the assembly reads the word after `tree`.
-/// @custom:solar-safe memory arithmetic
+/// The assembly-free port hashes each pair as `keccak256(abi.encode(min, max))`.
+/// `nodeProof` counts depth before allocating. Multiproofs mark the union of the
+/// selected leaves' ancestor paths to count their hash steps, then reuse that
+/// workspace as the proof queue. Results have their exact lengths without array
+/// truncation. All array accesses remain checked. Index arithmetic is unchecked:
+/// validated leaves and at most `tree.length / 2` internal nodes bound the queue.
+/// A sibling past the end of `tree`, which only an even-length tree has, reverts
+/// with `Panic(0x32)` where the original assembly reads the word after `tree`.
+/// @custom:solar-safe memory
 library MerkleTreeLib {
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                       CUSTOM ERRORS                        */
@@ -120,60 +120,78 @@ library MerkleTreeLib {
         pure
         returns (bytes32[] memory result)
     {
-        if (nodeIndex >= tree.length) revert MerkleTreeOutOfBoundsAccess();
-        uint256 depth;
-        for (uint256 i = nodeIndex; i != 0; i = (i - 1) >> 1) {
-            ++depth;
-        }
-        result = new bytes32[](depth);
-        uint256 o;
-        // Each sibling on the way up: the next node for an odd one, the previous for an even.
-        for (uint256 i = nodeIndex; i != 0; i = (i - 1) >> 1) {
-            result[o] = tree[(i & 1) == 0 ? i - 1 : i + 1];
-            ++o;
+        // Each non-root node has a smaller parent; depth and output positions are bounded.
+        unchecked {
+            if (nodeIndex >= tree.length) revert MerkleTreeOutOfBoundsAccess();
+            uint256 depth;
+            for (uint256 i = nodeIndex; i != 0; i = (i - 1) >> 1) {
+                ++depth;
+            }
+            result = new bytes32[](depth);
+            uint256 o;
+            // Each sibling on the way up: the next node for an odd one, the previous for an even.
+            for (uint256 i = nodeIndex; i != 0; i = (i - 1) >> 1) {
+                result[o] = tree[(i & 1) == 0 ? i - 1 : i + 1];
+                ++o;
+            }
         }
     }
 
     /// @dev Returns proof and corresponding flags for multiple leaves.
     /// The `leafIndices` must be non-empty and sorted in strictly ascending order.
+    /// @custom:solar-inline
     function multiProofForLeaves(bytes32[] memory tree, uint256[] memory leafIndices)
         internal
         pure
         returns (bytes32[] memory proof, bool[] memory flags)
     {
-        uint256 c = leafIndices.length;
-        if (c == 0) revert MerkleTreeInvalidLeafIndices();
-        uint256 n = tree.length;
-        uint256 l = n - (n >> 1); // Num leaves.
-        uint256 p;
-        for (uint256 i; i < c; ++i) {
-            uint256 j = leafIndices[i]; // Leaf index.
-            if (j >= l) revert MerkleTreeOutOfBoundsAccess();
-            if (i != 0 && j <= p) revert MerkleTreeInvalidLeafIndices();
-            p = j;
-        }
-        if (c == 1) {
-            proof = nodeProof(tree, n - 1 - leafIndices[0]);
-            flags = new bool[](proof.length);
-            return (proof, flags);
-        }
-        // Every sibling is supplied when all leaves of a complete tree are selected.
-        if (c == l && n & 1 != 0) {
-            proof = new bytes32[](0);
-            flags = new bool[](c - 1);
-            for (uint256 i; i < flags.length; ++i) {
-                flags[i] = true;
+        unchecked {
+            uint256 c = leafIndices.length;
+            if (c == 0) revert MerkleTreeInvalidLeafIndices();
+            uint256 n = tree.length;
+            uint256 l = n - (n >> 1); // Num leaves.
+            uint256[] memory q = new uint256[](c + (n >> 1) + 1);
+            // The prefix holds one-based leaf nodes. The tail first marks ancestors,
+            // then holds queued parents. Index zero is the sentinel above the root.
+            q[c] = 1;
+            uint256 count;
+            uint256 p;
+            for (uint256 i; i < c; ++i) {
+                uint256 j = leafIndices[i]; // Leaf index.
+                if (j >= l) revert MerkleTreeOutOfBoundsAccess();
+                if (j < p) revert MerkleTreeInvalidLeafIndices();
+                p = j + 1;
+                q[i] = n - j;
+                // Mark each internal ancestor once, stopping at a previously marked path.
+                for (uint256 parent = (n - j) >> 1; q[c + parent] == 0; parent >>= 1) {
+                    q[c + parent] = 1;
+                    ++count;
+                }
             }
-            return (proof, flags);
+            flags = new bool[](count);
+            uint256 proofSize = count + 1 - c;
+            proof = new bytes32[](proofSize);
+            uint256 b;
+            uint256 proofLen;
+            for (uint256 i; i < count; ++i) {
+                bool f = proofSize == 0;
+                if (!f) {
+                    uint256 sibling = q[b++] ^ 1;
+                    // An unwritten queue slot is still 0 or 1 from marking, whereas
+                    // every sibling here is >= 2. Reading the next slot is in bounds
+                    // even with one pending node, and cannot consume a stale marker.
+                    f = q[b] == sibling;
+                    if (f) {
+                        ++b;
+                    } else {
+                        proof[proofLen++] = tree[sibling - 1];
+                    }
+                    // Siblings have the same parent, so the consumed node need not stay live.
+                    q[c + i] = sibling >> 1;
+                }
+                flags[i] = f;
+            }
         }
-        uint256[] memory q = new uint256[](c + (n >> 1));
-        for (uint256 i; i < c; ++i) {
-            q[i] = n - 1 - leafIndices[i];
-        }
-        uint256 count = _recordProof(q, c);
-        flags = new bool[](count);
-        proof = new bytes32[](count + 1 - c);
-        _writeProof(tree, q, proof, flags);
     }
 
     /// @dev Returns a copy of leaves, with the length padded to a power of 2.
@@ -214,38 +232,5 @@ library MerkleTreeLib {
     /// @custom:solar-inline
     function _hashPair(bytes32 a, bytes32 b) private pure returns (bytes32) {
         return b < a ? keccak256(abi.encode(b, a)) : keccak256(abi.encode(a, b));
-    }
-
-    /// @dev Each step consumes one or two nodes and appends their parent. The first consumed
-    /// slot records the sibling index and whether the second was consumed, for `_writeProof`.
-    function _recordProof(uint256[] memory q, uint256 end) private pure returns (uint256 count) {
-        uint256 b;
-        while (q[b] != 0) {
-            uint256 j = q[b];
-            uint256 s = j - 1 + ((j & 1) << 1);
-            bool f = b + 1 < end && q[b + 1] == s;
-            q[b] = (s << 1) | (f ? 1 : 0);
-            b += f ? 2 : 1;
-            q[end++] = (j - 1) >> 1;
-            ++count;
-        }
-    }
-
-    /// @dev Emits the counted proof in queue order without changing the source tree.
-    function _writeProof(
-        bytes32[] memory tree,
-        uint256[] memory q,
-        bytes32[] memory proof,
-        bool[] memory flags
-    ) private pure {
-        uint256 proofLen;
-        uint256 b;
-        for (uint256 i; i < flags.length; ++i) {
-            uint256 step = q[b];
-            bool f = step & 1 != 0;
-            flags[i] = f;
-            if (!f) proof[proofLen++] = tree[step >> 1];
-            b += f ? 2 : 1;
-        }
     }
 }
