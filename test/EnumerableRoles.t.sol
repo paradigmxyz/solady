@@ -320,4 +320,37 @@ contract EnumerableRolesTest is SoladyTest {
             }
         }
     }
+
+    function testRemovalOrderAndReinsertion() public {
+        uint256 role = type(uint256).max;
+        mockEnumerableRoles.setRole(address(1), role, true);
+        mockEnumerableRoles.setRole(address(2), role, true);
+        mockEnumerableRoles.setRole(address(3), role, true);
+        mockEnumerableRoles.setRole(address(1), 0, true);
+        // Adding an existing holder does not append it again.
+        mockEnumerableRoles.setRole(address(2), role, true);
+        assertEq(mockEnumerableRoles.roleHolderCount(role), 3);
+
+        mockEnumerableRoles.setRole(address(1), role, false);
+        assertEq(mockEnumerableRoles.roleHolderAt(role, 0), address(3));
+        assertEq(mockEnumerableRoles.roleHolderAt(role, 1), address(2));
+        assertFalse(mockEnumerableRoles.hasRole(address(1), role));
+        assertTrue(mockEnumerableRoles.hasRole(address(1), 0));
+
+        // Removing the holder moved into index zero must use its updated position.
+        mockEnumerableRoles.setRole(address(3), role, false);
+        assertEq(mockEnumerableRoles.roleHolderAt(role, 0), address(2));
+        mockEnumerableRoles.setRole(address(2), role, false);
+        mockEnumerableRoles.setRole(address(2), role, false);
+        assertEq(mockEnumerableRoles.roleHolders(role).length, 0);
+        vm.expectRevert(EnumerableRoles.RoleHoldersIndexOutOfBounds.selector);
+        mockEnumerableRoles.roleHolderAt(role, 0);
+
+        mockEnumerableRoles.setRole(address(1), role, true);
+        assertEq(mockEnumerableRoles.roleHolderCount(role), 1);
+        assertEq(mockEnumerableRoles.roleHolderAt(role, 0), address(1));
+        assertTrue(mockEnumerableRoles.hasRole(address(1), role));
+        assertEq(mockEnumerableRoles.owner(), address(this));
+        assertEq(mockEnumerableRoles.MAX_ROLE(), type(uint256).max);
+    }
 }

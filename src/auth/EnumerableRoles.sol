@@ -24,16 +24,14 @@ pragma solidity ^0.8.4;
 /// This implementation is compatible with any Ownable.
 /// This implementation is NOT compatible with OwnableRoles.
 ///
-/// The checked port keeps the holders in the assembly's slots and words, so it is
-/// storage-compatible with it, and leaves the stale words a removal leaves there. It
-/// derives the slots in Solidity as `abi.encodePacked` hashes; Solidity cannot name
-/// them, so two trusted helpers read and write a slot, and a third adds an index to
-/// the root slot with wrap-around, as the assembly does. The self-staticcalls to
+/// The safe port stores holders and their positions in Solidity arrays and mappings.
+/// This storage layout is for new deployments, not upgrades from the original layout.
+/// Removing a holder moves the last holder into its position. The self-staticcalls to
 /// `owner()` and `MAX_ROLE()` are plain low-level calls whose first returned word is
 /// compared, the roles in `encodedRoles` are read a word at a time, and the event and
 /// errors are ordinary emits and reverts. The private helpers carry the contract's
 /// name, as upstream's do, so that it still combines with Ownable and TimedRoles.
-/// @custom:solar-safe memory arithmetic
+/// @custom:solar-safe
 abstract contract EnumerableRoles {
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                           EVENTS                           */
@@ -66,18 +64,13 @@ abstract contract EnumerableRoles {
     /*                          STORAGE                           */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
 
-    /// @dev The storage layout of the holders enumerable mapping is given by:
-    /// ```
-    ///     mstore(0x18, holder)
-    ///     mstore(0x04, _ENUMERABLE_ROLES_SLOT_SEED)
-    ///     mstore(0x00, role)
-    ///     let rootSlot := keccak256(0x00, 0x24)
-    ///     let positionSlot := keccak256(0x00, 0x38)
-    ///     let holderSlot := add(rootSlot, sload(positionSlot))
-    ///     let holderInStorage := shr(96, sload(holderSlot))
-    ///     let length := shr(160, shl(160, sload(rootSlot)))
-    /// ```
-    uint256 private constant _ENUMERABLE_ROLES_SLOT_SEED = 0xee9853bb;
+    /// @dev Holders in enumeration order and their one-based positions.
+    struct EnumerableRoleData {
+        address[] holders;
+        mapping(address => uint256) positions;
+    }
+
+    mapping(uint256 => EnumerableRoleData) private _enumerableRolesData;
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                  PUBLIC UPDATE FUNCTIONS                   */
@@ -95,40 +88,24 @@ abstract contract EnumerableRoles {
 
     /// @dev Returns if `holder` has active `role`.
     function hasRole(address holder, uint256 role) public view virtual returns (bool result) {
-        result = _enumerableRolesSload(_enumerableRolesPositionSlot(role, holder)) != 0;
+        result = _enumerableRolesData[role].positions[holder] != 0;
     }
 
     /// @dev Returns an array of the holders of `role`.
     function roleHolders(uint256 role) public view virtual returns (address[] memory result) {
-        uint256 rootSlot = _enumerableRolesRootSlot(role);
-        uint256 rootPacked = _enumerableRolesSload(rootSlot);
-        uint256 n = uint96(rootPacked);
-        result = new address[](n);
-        if (n != 0) {
-            // The first holder shares the root slot with the length.
-            result[0] = address(uint160(rootPacked >> 96));
-            for (uint256 i = 1; i < n; ++i) {
-                result[i] =
-                    address(uint160(_enumerableRolesSload(_enumerableRolesAdd(rootSlot, i)) >> 96));
-            }
-        }
+        result = _enumerableRolesData[role].holders;
     }
 
     /// @dev Returns the total number of holders of `role`.
     function roleHolderCount(uint256 role) public view virtual returns (uint256 result) {
-        result = uint96(_enumerableRolesSload(_enumerableRolesRootSlot(role)));
+        result = _enumerableRolesData[role].holders.length;
     }
 
     /// @dev Returns the holder of `role` at the index `i`.
     function roleHolderAt(uint256 role, uint256 i) public view virtual returns (address result) {
-        uint256 rootSlot = _enumerableRolesRootSlot(role);
-        uint256 rootPacked = _enumerableRolesSload(rootSlot);
-        if (i >= uint96(rootPacked)) revert RoleHoldersIndexOutOfBounds();
-        result = address(uint160(rootPacked >> 96));
-        if (i != 0) {
-            uint256 holderSlot = _enumerableRolesAdd(rootSlot, i);
-            result = address(uint160(_enumerableRolesSload(holderSlot) >> 96));
-        }
+        address[] storage holders = _enumerableRolesData[role].holders;
+        if (i >= holders.length) revert RoleHoldersIndexOutOfBounds();
+        result = holders[i];
     }
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
@@ -139,45 +116,24 @@ abstract contract EnumerableRoles {
     function _setRole(address holder, uint256 role, bool active) internal virtual {
         _validateRole(role);
         if (holder == address(0)) revert RoleHolderIsZeroAddress();
-        uint256 rootSlot = _enumerableRolesRootSlot(role);
-        uint256 rootPacked = _enumerableRolesSload(rootSlot);
-        uint256 n = uint96(rootPacked);
-        uint256 positionSlot = _enumerableRolesPositionSlot(role, holder);
-        uint256 position = _enumerableRolesSload(positionSlot);
+        EnumerableRoleData storage data = _enumerableRolesData[role];
+        uint256 position = data.positions[holder];
         if (!active) {
             if (position != 0) {
-                uint256 nSub = n - 1;
-                // The root's holder word, which the removal of the last holder leaves.
-                uint256 rootHolder = rootPacked >> 96 << 96;
-                if (position - 1 != nSub) {
+                uint256 last = data.holders.length - 1;
+                uint256 index = position - 1;
+                if (index != last) {
                     // Move the last holder into the removed holder's place.
-                    uint256 lastHolder =
-                        _enumerableRolesSload(_enumerableRolesAdd(rootSlot, nSub)) >> 96;
-                    if (position == 1) {
-                        rootHolder = lastHolder << 96;
-                    } else {
-                        _enumerableRolesSstore(
-                            _enumerableRolesAdd(rootSlot, position - 1), lastHolder << 96
-                        );
-                    }
-                    _enumerableRolesSstore(_enumerableRolesAdd(rootSlot, nSub), 0);
-                    _enumerableRolesSstore(
-                        _enumerableRolesPositionSlot(role, address(uint160(lastHolder))), position
-                    );
+                    address lastHolder = data.holders[last];
+                    data.holders[index] = lastHolder;
+                    data.positions[lastHolder] = position;
                 }
-                _enumerableRolesSstore(rootSlot, rootHolder | nSub);
-                _enumerableRolesSstore(positionSlot, 0);
+                data.holders.pop();
+                delete data.positions[holder];
             }
         } else if (position == 0) {
-            uint256 holderWord = uint256(uint160(holder)) << 96;
-            if (n == 0) {
-                // The first holder replaces whatever a removal left in the root.
-                _enumerableRolesSstore(rootSlot, holderWord | 1);
-            } else {
-                _enumerableRolesSstore(_enumerableRolesAdd(rootSlot, n), holderWord);
-                _enumerableRolesSstore(rootSlot, rootPacked + 1);
-            }
-            _enumerableRolesSstore(positionSlot, n + 1);
+            data.holders.push(holder);
+            data.positions[holder] = data.holders.length;
         }
         emit RoleSet(holder, role, active);
     }
@@ -211,7 +167,7 @@ abstract contract EnumerableRoles {
         uint256 n = encodedRoles.length >> 5;
         for (uint256 i; i < n; ++i) {
             uint256 role = uint256(_enumerableRolesReadBytes32(encodedRoles, i << 5));
-            if (_enumerableRolesSload(_enumerableRolesPositionSlot(role, holder)) != 0) {
+            if (_enumerableRolesData[role].positions[holder] != 0) {
                 return true;
             }
         }
@@ -289,25 +245,6 @@ abstract contract EnumerableRoles {
         revert EnumerableRolesUnauthorized();
     }
 
-    /// @dev The root slot of `role`: the hash of `role` and the seed's four bytes. It holds
-    /// the first holder above the 96-bit length; the holder at index `i > 0` is `i` slots on.
-    /// @custom:solar-inline
-    function _enumerableRolesRootSlot(uint256 role) private pure returns (uint256) {
-        return uint256(keccak256(abi.encodePacked(role, uint32(_ENUMERABLE_ROLES_SLOT_SEED))));
-    }
-
-    /// @dev The position slot of `holder` for `role`, which holds its index plus one.
-    /// @custom:solar-inline
-    function _enumerableRolesPositionSlot(uint256 role, address holder)
-        private
-        pure
-        returns (uint256)
-    {
-        // The seed's four bytes and the holder's twenty, packed as one item.
-        uint256 seedAndHolder = _ENUMERABLE_ROLES_SLOT_SEED << 160 | uint160(holder);
-        return uint256(keccak256(abi.encodePacked(role, uint192(seedAndHolder))));
-    }
-
     /// @dev The 32 bytes of `b` at `offset`.
     /// @custom:solar-inline
     function _enumerableRolesReadBytes32(bytes memory b, uint256 offset)
@@ -317,35 +254,6 @@ abstract contract EnumerableRoles {
     {
         for (uint256 k; k < 32; ++k) {
             result |= bytes32(b[offset + k]) >> (8 * k);
-        }
-    }
-
-    /// @dev Returns the word in storage slot `slot`. Solidity cannot name a slot it did not
-    /// allocate.
-    /// @custom:solar-trusted
-    function _enumerableRolesSload(uint256 slot) private view returns (uint256 value) {
-        /// @solidity memory-safe-assembly
-        assembly {
-            value := sload(slot)
-        }
-    }
-
-    /// @dev Stores `value` in storage slot `slot`. Solidity cannot name a slot it did not
-    /// allocate.
-    /// @custom:solar-trusted
-    function _enumerableRolesSstore(uint256 slot, uint256 value) private {
-        /// @solidity memory-safe-assembly
-        assembly {
-            sstore(slot, value)
-        }
-    }
-
-    /// @dev `a + b` modulo `2**256`, as the assembly adds an index to a slot; checked
-    /// arithmetic would revert where it wraps.
-    /// @custom:solar-trusted
-    function _enumerableRolesAdd(uint256 a, uint256 b) private pure returns (uint256 c) {
-        unchecked {
-            c = a + b;
         }
     }
 }

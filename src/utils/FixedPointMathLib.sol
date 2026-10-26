@@ -10,6 +10,7 @@ pragma solidity ^0.8.4;
 /// the algorithm proves, as the roots' Newton steps and the rounding additions do,
 /// the port spells the step with the library's own `raw` operations, whose
 /// unchecked bodies are its only trusted code. Every other step is checked.
+/// The port has no inline assembly, including its zero-divisor and signed-overflow cases.
 /// @custom:solar-safe memory arithmetic
 library FixedPointMathLib {
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
@@ -1019,57 +1020,36 @@ library FixedPointMathLib {
     }
 
     /// @dev Returns `x / y`, returning 0 if `y` is zero.
-    /// @custom:solar-trusted
     function rawDiv(uint256 x, uint256 y) internal pure returns (uint256 z) {
-        /// @solidity memory-safe-assembly
-        assembly {
-            z := div(x, y)
-        }
+        z = y == 0 ? 0 : x / y;
     }
 
     /// @dev Returns `x / y`, returning 0 if `y` is zero.
     /// @custom:solar-trusted
     function rawSDiv(int256 x, int256 y) internal pure returns (int256 z) {
-        /// @solidity memory-safe-assembly
-        assembly {
-            z := sdiv(x, y)
+        unchecked {
+            z = y == 0 ? int256(0) : x / y;
         }
     }
 
     /// @dev Returns `x % y`, returning 0 if `y` is zero.
-    /// @custom:solar-trusted
     function rawMod(uint256 x, uint256 y) internal pure returns (uint256 z) {
-        /// @solidity memory-safe-assembly
-        assembly {
-            z := mod(x, y)
-        }
+        z = y == 0 ? 0 : x % y;
     }
 
     /// @dev Returns `x % y`, returning 0 if `y` is zero.
-    /// @custom:solar-trusted
     function rawSMod(int256 x, int256 y) internal pure returns (int256 z) {
-        /// @solidity memory-safe-assembly
-        assembly {
-            z := smod(x, y)
-        }
+        z = y == 0 ? int256(0) : x % y;
     }
 
     /// @dev Returns `(x + y) % d`, return 0 if `d` if zero.
-    /// @custom:solar-trusted
     function rawAddMod(uint256 x, uint256 y, uint256 d) internal pure returns (uint256 z) {
-        /// @solidity memory-safe-assembly
-        assembly {
-            z := addmod(x, y, d)
-        }
+        z = d == 0 ? 0 : addmod(x, y, d);
     }
 
     /// @dev Returns `(x * y) % d`, return 0 if `d` if zero.
-    /// @custom:solar-trusted
     function rawMulMod(uint256 x, uint256 y, uint256 d) internal pure returns (uint256 z) {
-        /// @solidity memory-safe-assembly
-        assembly {
-            z := mulmod(x, y, d)
-        }
+        z = d == 0 ? 0 : mulmod(x, y, d);
     }
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/

@@ -174,4 +174,64 @@ contract TimedRolesTest is SoladyTest {
             }
         }
     }
+
+    function testTimedRoleStorageIsolation() public {
+        address alice = address(0xa11ce);
+        address bob = address(0xb0b);
+        uint256 role = type(uint256).max;
+        mockTimedRoles.setTimedRole(alice, role, 1, type(uint40).max);
+        mockTimedRoles.setTimedRole(bob, role, 10, 20);
+        mockTimedRoles.setTimedRole(alice, 0, 30, 40);
+        mockTimedRoles.setTimedRole(alice, role, 50, 60);
+
+        (bool active, uint40 start, uint40 expires) = mockTimedRoles.timedRoleActive(alice, role);
+        assertEq(start, 50);
+        assertEq(expires, 60);
+        (, start, expires) = mockTimedRoles.timedRoleActive(bob, role);
+        assertEq(start, 10);
+        assertEq(expires, 20);
+        (, start, expires) = mockTimedRoles.timedRoleActive(alice, 0);
+        assertEq(start, 30);
+        assertEq(expires, 40);
+
+        vm.warp(50);
+        (active,,) = mockTimedRoles.timedRoleActive(alice, role);
+        assertTrue(active);
+        assertTrue(mockTimedRoles.hasAnyTimedRoles(alice, abi.encode(role)));
+        vm.warp(60);
+        (active,,) = mockTimedRoles.timedRoleActive(alice, role);
+        assertTrue(active);
+        vm.warp(61);
+        (active,,) = mockTimedRoles.timedRoleActive(alice, role);
+        assertFalse(active);
+        assertFalse(mockTimedRoles.hasAnyTimedRoles(alice, abi.encode(role)));
+
+        // The mapping must not overwrite the derived contract's storage.
+        assertEq(mockTimedRoles.owner(), address(this));
+        assertEq(mockTimedRoles.MAX_TIMED_ROLE(), type(uint256).max);
+    }
+
+    function testTimedRoleRangeBoundaries() public {
+        address holder = address(1);
+        uint40 end = type(uint40).max;
+        mockTimedRoles.setTimedRole(holder, 1, end, end);
+        vm.warp(end);
+        (bool active, uint40 start, uint40 expires) = mockTimedRoles.timedRoleActive(holder, 1);
+        assertTrue(active);
+        assertEq(start, end);
+        assertEq(expires, end);
+        vm.warp(uint256(end) + 1);
+        (active,,) = mockTimedRoles.timedRoleActive(holder, 1);
+        assertFalse(active);
+
+        mockTimedRoles.setTimedRole(holder, 1, 0, 0);
+        vm.warp(0);
+        (active, start, expires) = mockTimedRoles.timedRoleActive(holder, 1);
+        assertTrue(active);
+        assertEq(start, 0);
+        assertEq(expires, 0);
+        vm.warp(1);
+        (active,,) = mockTimedRoles.timedRoleActive(holder, 1);
+        assertFalse(active);
+    }
 }

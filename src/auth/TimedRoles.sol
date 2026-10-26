@@ -30,15 +30,14 @@ pragma solidity ^0.8.4;
 /// Names are deliberately prefixed with "Timed", so that this contract
 /// can be used in conjunction with EnumerableRoles without collisions.
 ///
-/// The checked port keeps each active time range in the assembly's slot and word, so it
-/// is storage-compatible with it. It derives the slot in Solidity as an
-/// `abi.encodePacked` hash; Solidity cannot name it, so two trusted helpers read and
-/// write a slot. The self-staticcalls to `owner()` and `MAX_TIMED_ROLE()` are plain
+/// The safe port stores active time ranges in a Solidity mapping without inline assembly.
+/// This storage layout is for new deployments, not upgrades from the original layout.
+/// The self-staticcalls to `owner()` and `MAX_TIMED_ROLE()` are plain
 /// low-level calls whose first returned word is compared, the timed roles in
 /// `encodedTimeRoles` are read a word at a time, and the event and errors are ordinary
 /// emits and reverts. The private helpers carry the contract's name, as upstream's do,
 /// so that it still combines with Ownable and EnumerableRoles.
-/// @custom:solar-safe memory arithmetic
+/// @custom:solar-safe
 abstract contract TimedRoles {
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                           EVENTS                           */
@@ -73,17 +72,11 @@ abstract contract TimedRoles {
     /*                          STORAGE                           */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
 
-    /// @dev The storage layout of the mapping is given by:
-    /// ```
-    ///     mstore(0x18, holder)
-    ///     mstore(0x04, _TIMED_ROLES_SLOT_SEED)
-    ///     mstore(0x00, timedRole)
-    ///     let activeTimeRangeSlot := keccak256(0x00, 0x38)
-    /// ```
+    /// @dev The active time range for each holder and timed role, in Solidity-managed storage.
     /// Bits Layout:
     /// - [0..39]    `expires`.
     /// - [216..255] `start`.
-    uint256 private constant _TIMED_ROLES_SLOT_SEED = 0x28900261;
+    mapping(address => mapping(uint256 => uint256)) private _timedRolesRanges;
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                  PUBLIC UPDATE FUNCTIONS                   */
@@ -111,7 +104,7 @@ abstract contract TimedRoles {
         virtual
         returns (bool isActive, uint40 start, uint40 expires)
     {
-        uint256 p = _timedRolesSload(_timedRolesRangeSlot(holder, timedRole));
+        uint256 p = _timedRolesRanges[holder][timedRole];
         start = uint40(p >> 216);
         expires = uint40(p);
         // Active unless before the start or after the expiry, tested without branches.
@@ -132,9 +125,7 @@ abstract contract TimedRoles {
         // Validate the range.
         if (expires < start) revert InvalidTimedRoleRange();
         // Store the range.
-        _timedRolesSstore(
-            _timedRolesRangeSlot(holder, timedRole), uint256(start) << 216 | uint256(expires)
-        );
+        _timedRolesRanges[holder][timedRole] = uint256(start) << 216 | uint256(expires);
         // Emit the {TimedRoleSet} event.
         emit TimedRoleSet(holder, timedRole, start, expires);
     }
@@ -171,7 +162,7 @@ abstract contract TimedRoles {
         uint256 n = encodedTimeRoles.length >> 5;
         for (uint256 i; i < n; ++i) {
             uint256 timedRole = uint256(_timedRolesReadBytes32(encodedTimeRoles, i << 5));
-            uint256 p = _timedRolesSload(_timedRolesRangeSlot(holder, timedRole));
+            uint256 p = _timedRolesRanges[holder][timedRole];
             // Active unless before the start or after the expiry, tested without branches.
             uint256 inactive =
                 (block.timestamp < p >> 216 ? 1 : 0) | (block.timestamp > uint40(p) ? 1 : 0);
@@ -252,18 +243,6 @@ abstract contract TimedRoles {
         revert TimedRolesUnauthorized();
     }
 
-    /// @dev The active time range slot of `timedRole` for `holder`: the hash of `timedRole`,
-    /// the seed's four bytes and the holder's twenty, which pack into one item.
-    /// @custom:solar-inline
-    function _timedRolesRangeSlot(address holder, uint256 timedRole)
-        private
-        pure
-        returns (uint256)
-    {
-        uint256 seedAndHolder = _TIMED_ROLES_SLOT_SEED << 160 | uint160(holder);
-        return uint256(keccak256(abi.encodePacked(timedRole, uint192(seedAndHolder))));
-    }
-
     /// @dev The 32 bytes of `b` at `offset`.
     /// @custom:solar-inline
     function _timedRolesReadBytes32(bytes memory b, uint256 offset)
@@ -273,26 +252,6 @@ abstract contract TimedRoles {
     {
         for (uint256 k; k < 32; ++k) {
             result |= bytes32(b[offset + k]) >> (8 * k);
-        }
-    }
-
-    /// @dev Returns the word in storage slot `slot`. Solidity cannot name a slot it did not
-    /// allocate.
-    /// @custom:solar-trusted
-    function _timedRolesSload(uint256 slot) private view returns (uint256 value) {
-        /// @solidity memory-safe-assembly
-        assembly {
-            value := sload(slot)
-        }
-    }
-
-    /// @dev Stores `value` in storage slot `slot`. Solidity cannot name a slot it did not
-    /// allocate.
-    /// @custom:solar-trusted
-    function _timedRolesSstore(uint256 slot, uint256 value) private {
-        /// @solidity memory-safe-assembly
-        assembly {
-            sstore(slot, value)
         }
     }
 }

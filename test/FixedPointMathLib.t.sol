@@ -1884,6 +1884,24 @@ contract FixedPointMathLibTest is SoladyTest {
         assertEq(FixedPointMathLib.rawMulMod(x, y, denominator), z);
     }
 
+    function testRawDivisionAndModuloEdges() public {
+        uint256 max = type(uint256).max;
+        int256 min = type(int256).min;
+        assertEq(FixedPointMathLib.rawDiv(max, 0), 0);
+        assertEq(FixedPointMathLib.rawSDiv(min, 0), 0);
+        assertEq(FixedPointMathLib.rawSDiv(min, -1), min);
+        assertEq(FixedPointMathLib.rawMod(max, 0), 0);
+        assertEq(FixedPointMathLib.rawSMod(min, 0), 0);
+        assertEq(FixedPointMathLib.rawSMod(min, -1), 0);
+        assertEq(FixedPointMathLib.rawSMod(-7, 3), -1);
+        assertEq(FixedPointMathLib.rawSMod(7, -3), 1);
+        assertEq(FixedPointMathLib.rawAddMod(max, max, 0), 0);
+        assertEq(FixedPointMathLib.rawMulMod(max, max, 0), 0);
+        // The modular operations retain intermediates wider than 256 bits.
+        assertEq(FixedPointMathLib.rawAddMod(max, max, max - 1), 2);
+        assertEq(FixedPointMathLib.rawMulMod(max, max, max - 1), 1);
+    }
+
     function testLog10() public {
         assertEq(FixedPointMathLib.log10(0), 0);
         assertEq(FixedPointMathLib.log10(1), 0);

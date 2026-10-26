@@ -109,6 +109,37 @@ class SafetyAuditTests(unittest.TestCase):
             benchmark.safety_violations(output), [("src/Lib.sol", "UncheckedBlock")]
         )
         self.assertEqual(benchmark.trusted_declarations(output), ["src/Lib.sol:Lib._truncate"])
+        self.assertEqual(
+            benchmark.safety_violations(output, assembly_free=True),
+            [("src/Lib.sol", "InlineAssembly")],
+        )
+
+    def test_assembly_free_audit_checks_inside_unchecked_and_trusted_contracts(self):
+        output = {
+            "sources": {
+                "src/Trusted.sol": {
+                    "ast": {
+                        "nodeType": "ContractDefinition",
+                        "documentation": {"text": "@custom:solar-trusted"},
+                        "nodes": [
+                            {
+                                "nodeType": "UncheckedBlock",
+                                "statements": [{"nodeType": "InlineAssembly"}],
+                            }
+                        ],
+                    }
+                }
+            }
+        }
+        self.assertEqual(benchmark.safety_violations(output), [])
+        self.assertEqual(
+            benchmark.safety_violations(output, assembly_free=True),
+            [("src/Trusted.sol", "InlineAssembly")],
+        )
+
+    def test_assembly_free_audit_allows_unchecked_arithmetic(self):
+        output = {"sources": {"src/Wrap.sol": {"ast": {"nodeType": "UncheckedBlock"}}}}
+        self.assertEqual(benchmark.safety_violations(output, assembly_free=True), [])
 
     def test_a_mention_of_the_tag_is_not_the_tag(self):
         prose = {"nodeType": "StructuredDocumentation", "text": "Not `@custom:solar-trusted` here."}
@@ -131,6 +162,8 @@ class SafetyAuditTests(unittest.TestCase):
     def test_missing_ast_is_an_error(self):
         with self.assertRaises(KeyError):
             benchmark.safety_violations({"sources": {"src/Missing.sol": {}}})
+        with self.assertRaises(KeyError):
+            benchmark.safety_violations({"sources": {"src/Missing.sol": {}}}, assembly_free=True)
 
 
 class HarnessSelectionTests(unittest.TestCase):

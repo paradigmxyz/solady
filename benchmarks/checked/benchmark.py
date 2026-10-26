@@ -222,17 +222,21 @@ def unsafe_nodes(node):
             yield from unsafe_nodes(value)
 
 
-def safety_violations(output):
+def safety_violations(output, *, assembly_free=False):
     # The port has no compiler-owned library. Capabilities with no Solidity
     # spelling (shrinking an array in place, a raw revert, creating code from
     # bytes, arbitrary storage slots) stay in small declarations tagged
     # `@custom:solar-trusted`, which Solar's `@custom:solar-safe` profile also
     # recognizes. Every other line of every safe source and dependency is held
     # to the policy.
+    # The stricter assembly-free audit also inspects trusted declarations.
+    # Unchecked arithmetic is allowed, as in the default solar-safe profile.
+    nodes = walk if assembly_free else unsafe_nodes
     return [
         (path, node["nodeType"])
         for path, source in output["sources"].items()
-        for node in unsafe_nodes(source["ast"])
+        for node in nodes(source["ast"])
+        if not assembly_free or node.get("nodeType") == "InlineAssembly"
     ]
 
 

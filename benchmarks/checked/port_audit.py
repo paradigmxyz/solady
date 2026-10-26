@@ -22,6 +22,8 @@ audit checks:
   older solc that compiles the original must also compile the port;
 - safety: no inline assembly or `unchecked` block outside a declaration
   tagged `@custom:solar-trusted`, in the port or anything it imports;
+  with `--assembly-free`, unchecked arithmetic is allowed, but inline
+  assembly is rejected even in trusted declarations;
 - mixins: no two ported contracts define a private function with the same
   name and parameter types, which a contract inheriting both could not
   compile, beyond the clashes the originals already have;
@@ -335,9 +337,10 @@ def run(args):
             for name in trusted:
                 print(f"     trusted {name.split(':', 1)[1]}")
 
-    violations = safety_violations({"sources": port})
+    violations = safety_violations({"sources": port}, assembly_free=args.assembly_free)
     for path, kind in violations:
-        print(f"UNSAFE {path}: {kind} outside a declaration tagged @custom:solar-trusted")
+        scope = "" if args.assembly_free else " outside a declaration tagged @custom:solar-trusted"
+        print(f"UNSAFE {path}: {kind}{scope}")
     mine = mixin_clashes(port, paths)
     theirs = mixin_clashes(upstream, paths)
     clashes = {
@@ -369,6 +372,11 @@ def main():
     )
     parser.add_argument(
         "--trusted", action="store_true", help="list each port's trusted declarations"
+    )
+    parser.add_argument(
+        "--assembly-free",
+        action="store_true",
+        help="reject all inline assembly, including trusted code, and allow unchecked arithmetic",
     )
     parser.add_argument("source", nargs="*", help="sources to audit (default: the whole archive)")
     sys.exit(run(parser.parse_args()))
