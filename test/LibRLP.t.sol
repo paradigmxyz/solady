@@ -3,6 +3,7 @@ pragma solidity ^0.8.4;
 
 import "./utils/SoladyTest.sol";
 import {LibRLP} from "../src/utils/LibRLP.sol";
+import {LibRLP as GlobalLibRLP, List as GlobalList} from "../src/utils/g/LibRLP.sol";
 import {FixedPointMathLib} from "../src/utils/FixedPointMathLib.sol";
 
 contract LibRLPTest is SoladyTest {
@@ -136,7 +137,8 @@ contract LibRLPTest is SoladyTest {
         }
     }
 
-    function testRLPMemory(bytes32) public returns (LibRLP.List memory l) {
+    function testRLPMemory(bytes32) public {
+        LibRLP.List memory l;
         while (true) {
             uint256 r = _random();
             if (r & 0x0003 == 0) {
@@ -193,18 +195,7 @@ contract LibRLPTest is SoladyTest {
     }
 
     function _getUint256(LibRLP.List memory l, uint256 i) internal pure returns (uint256 result) {
-        /// @solidity memory-safe-assembly
-        assembly {
-            mstore(0x00, 0)
-            let head := and(mload(l), 0xffffffffff)
-            if head {
-                for { let j := 0 } iszero(eq(j, i)) { j := add(j, 1) } {
-                    head := and(mload(head), 0xffffffffff)
-                }
-                result := shr(48, mload(head))
-                if eq(1, byte(26, mload(head))) { result := mload(result) }
-            }
-        }
+        result = l._items[i]._word;
     }
 
     function testRLPEncodeBytes() public {
@@ -655,16 +646,49 @@ contract LibRLPTest is SoladyTest {
     }
 
     function _checkMemory(LibRLP.List memory l) internal pure {
-        /// @solidity memory-safe-assembly
-        assembly {
-            let m := mload(0x40)
-            let v := mload(l)
-            if gt(shr(40, v), m) { invalid() }
-            for { let head := and(v, 0xffffffffff) } head {} {
-                if gt(head, m) { invalid() }
-                head := and(mload(head), 0xffffffffff)
-            }
+        require(l._length <= l._items.length);
+        for (uint256 i; i < l._length; ++i) {
+            LibRLP.Item memory item = l._items[i];
+            if (item._kind == 3) _checkMemory(item._list);
         }
         _checkMemory();
+    }
+
+    function testTypedListRetainsReferences(bytes memory data, uint256 word, uint8 count) public {
+        LibRLP.List memory child;
+        LibRLP.List memory parent = LibRLP.p(child).p(child);
+        child.p(data);
+        uint256 n = uint256(count) % 64;
+        for (uint256 i; i < n; ++i) {
+            child.p(word);
+        }
+        // Mutate the source after appending it and after several capacity changes.
+        if (data.length != 0) data[0] ^= 0xff;
+        bytes memory payload = _encodeSimple(data);
+        bytes memory integer = _encodeSimple(word);
+        for (uint256 i; i < n; ++i) {
+            payload = abi.encodePacked(payload, integer);
+        }
+        bytes memory nested = _encodeSimple(payload, 0xc0);
+        bytes memory expected = _encodeSimple(abi.encodePacked(nested, nested), 0xc0);
+        assertEq(parent.encode(), expected);
+        assertEq(child.encode(), nested);
+    }
+
+    function testSingleByteEncodingKeepsAlias() public {
+        bytes memory input = hex"01";
+        bytes memory encoded = LibRLP.encode(input);
+        input[0] = 0x02;
+        assertEq(encoded, hex"02");
+    }
+
+    function testGlobalTypedListRetainsReferences() public {
+        GlobalList memory child;
+        GlobalList memory parent = GlobalLibRLP.p(child);
+        for (uint256 i = 1; i <= 5; ++i) {
+            child.p(i);
+        }
+        child.p("dog");
+        assertEq(parent.encode(), hex"cac9010203040583646f67");
     }
 }
