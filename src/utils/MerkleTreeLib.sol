@@ -150,6 +150,17 @@ library MerkleTreeLib {
             if (c == 0) revert MerkleTreeInvalidLeafIndices();
             uint256 n = tree.length;
             uint256 l = n - (n >> 1); // Num leaves.
+            if (c == l && n & 1 != 0) {
+                flags = new bool[](c - 1);
+                // A sorted selection of all leaves is exactly 0, 1, ..., c - 1.
+                // Fall through to normal validation to diagnose an invalid selection.
+                uint256 i;
+                for (; i < c - 1; ++i) {
+                    if (leafIndices[i] != i) break;
+                    flags[i] = true;
+                }
+                if (i == c - 1 && leafIndices[i] == i) return (new bytes32[](0), flags);
+            }
             uint256[] memory q = new uint256[](c + (n >> 1) + 1);
             // The prefix holds one-based leaf nodes. The tail first marks ancestors,
             // then holds queued parents. Index zero is the sentinel above the root.

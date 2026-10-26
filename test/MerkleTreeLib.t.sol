@@ -264,6 +264,24 @@ contract MerkleTreeLibTest is SoladyTest {
         return t.multiProofForLeaves(indices);
     }
 
+    function testFullProofValidationOrder() public {
+        bytes32[] memory t = new bytes32[](5);
+        uint256[] memory indices = new uint256[](3);
+        indices[0] = 1;
+        indices[1] = 2;
+        indices[2] = 3;
+        vm.expectRevert(MerkleTreeLib.MerkleTreeOutOfBoundsAccess.selector);
+        this.rawProof(t, indices);
+        indices[1] = 0;
+        vm.expectRevert(MerkleTreeLib.MerkleTreeInvalidLeafIndices.selector);
+        this.rawProof(t, indices);
+        indices[0] = 0;
+        indices[1] = 1;
+        indices[2] = 1;
+        vm.expectRevert(MerkleTreeLib.MerkleTreeInvalidLeafIndices.selector);
+        this.rawProof(t, indices);
+    }
+
     function _checkMultiProof(uint256 n, uint256 selected) private {
         bytes32[] memory leaves = new bytes32[](n);
         uint256 count;
