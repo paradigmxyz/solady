@@ -17,6 +17,8 @@ contract EnumerableRolesTest is SoladyTest {
 
     MockEnumerableRoles mockEnumerableRoles;
 
+    mapping(uint256 => EnumerableSetLib.AddressSet) private _expectedRoleHolders;
+
     function setUp() public {
         mockEnumerableRoles = new MockEnumerableRoles();
         mockEnumerableRoles.setMaxRole(type(uint256).max);
@@ -57,13 +59,24 @@ contract EnumerableRolesTest is SoladyTest {
 
     function _roleHolders(uint256 role)
         internal
-        pure
+        view
         returns (EnumerableSetLib.AddressSet storage holders)
     {
-        /// @solidity memory-safe-assembly
-        assembly {
-            holders.slot := add(role, 0x97)
+        // Typed sets occupy several slots; adjacent roles must not overlap their fields.
+        return _expectedRoleHolders[role];
+    }
+
+    function testAdjacentRoleSetsStaySeparate() public {
+        for (uint256 role; role < 8; ++role) {
+            address holder = address(uint160(role + 1));
+            _roleHolders(role).add(holder);
+            mockEnumerableRoles.setRoleDirect(holder, role, true);
         }
+        uint256[] memory roles = new uint256[](8);
+        for (uint256 role; role < roles.length; ++role) {
+            roles[role] = role;
+        }
+        _checkRoleHolders(roles);
     }
 
     function testSetRoleReverts(address holder, uint256 role, uint256 maxRole, bool maxRoleReverts)

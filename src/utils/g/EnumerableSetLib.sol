@@ -9,14 +9,14 @@ pragma solidity ^0.8.13;
 
 /// @dev An enumerable address set in storage.
 struct AddressSet {
-    mapping(uint256 => uint256) _values;
+    Entries _values;
     mapping(uint256 => uint256) _positions;
 }
 
 /// @dev An enumerable bytes32 set in storage.
 struct Bytes32Set {
     uint256 _lazyLength;
-    mapping(uint256 => uint256) _values;
+    Entries _values;
     mapping(uint256 => uint256) _positions;
 }
 
@@ -35,11 +35,24 @@ struct Uint8Set {
     uint256 data;
 }
 
+/// @dev One typed storage word in a set.
+struct Entry {
+    uint256 value;
+}
+
+/// @dev Keep the lazy entries adjacent without hashing their indices.
+struct Entries {
+    Entry[3] small;
+    mapping(uint256 => Entry) large;
+}
+
 using EnumerableSetLib for AddressSet global;
 using EnumerableSetLib for Bytes32Set global;
 using EnumerableSetLib for Uint256Set global;
 using EnumerableSetLib for Int256Set global;
 using EnumerableSetLib for Uint8Set global;
+using EnumerableSetLib for Entry global;
+using EnumerableSetLib for Entries global;
 
 /// @notice Library for managing enumerable sets in storage.
 /// @author Solady (https://github.com/vectorized/solady/blob/main/src/utils/g/EnumerableSetLib.sol)
@@ -55,8 +68,9 @@ using EnumerableSetLib for Uint8Set global;
 /// All enumerable sets except Uint8Set use a pop and swap mechanism to remove elements.
 /// This means that the iteration order of elements can change between element removals.
 ///
-/// The assembly-free port uses Solidity mappings for entries and positions, with an
-/// explicit lazy length for word sets. Integer sets wrap a bytes32 set. The first
+/// The assembly-free port stores the first three entries in adjacent typed slots,
+/// with mappings for further entries and positions and an explicit lazy length for
+/// word sets. Integer sets wrap a bytes32 set. The first
 /// three entries still avoid position writes; removal keeps insertion order until
 /// the set first exceeds three entries, then uses pop-and-swap. Address entries
 /// retain the packed length in entry zero. This changes storage layout and is for
@@ -94,14 +108,14 @@ library EnumerableSetLib {
 
     /// @dev Returns the number of elements in the set.
     function length(AddressSet storage set) internal view returns (uint256 result) {
-        uint256 rootPacked = set._values[0];
+        uint256 rootPacked = set._values.small[0].value;
         uint256 n = uint96(rootPacked);
         result = n >> 1;
         if (n == 0 && rootPacked >> 96 != 0) {
             result = 1;
-            if (set._values[1] != 0) {
+            if (set._values.small[1].value != 0) {
                 result = 2;
-                if (set._values[2] != 0) result = 3;
+                if (set._values.small[2].value != 0) result = 3;
             }
         }
     }
@@ -110,11 +124,11 @@ library EnumerableSetLib {
     function length(Bytes32Set storage set) internal view returns (uint256 result) {
         uint256 n = set._lazyLength;
         result = n >> 1;
-        if (n == 0 && set._values[0] != 0) {
+        if (n == 0 && set._values.small[0].value != 0) {
             result = 1;
-            if (set._values[1] != 0) {
+            if (set._values.small[1].value != 0) {
                 result = 2;
-                if (set._values[2] != 0) result = 3;
+                if (set._values.small[2].value != 0) result = 3;
             }
         }
     }
@@ -139,9 +153,10 @@ library EnumerableSetLib {
     /// @dev Returns whether `value` is in the set.
     function contains(AddressSet storage set, address value) internal view returns (bool result) {
         uint256 v = _addressWord(value);
-        uint256 rootPacked = set._values[0];
+        uint256 rootPacked = set._values.small[0].value;
         if (uint96(rootPacked) == 0) {
-            return rootPacked >> 96 == v || set._values[1] >> 96 == v || set._values[2] >> 96 == v;
+            return rootPacked >> 96 == v || set._values.small[1].value >> 96 == v
+                || set._values.small[2].value >> 96 == v;
         }
         result = set._positions[v] != 0;
     }
@@ -150,7 +165,8 @@ library EnumerableSetLib {
     function contains(Bytes32Set storage set, bytes32 value) internal view returns (bool result) {
         uint256 v = _word(value);
         if (set._lazyLength == 0) {
-            return set._values[0] == v || set._values[1] == v || set._values[2] == v;
+            return set._values.small[0].value == v || set._values.small[1].value == v
+                || set._values.small[2].value == v;
         }
         result = set._positions[v] != 0;
     }
@@ -173,24 +189,24 @@ library EnumerableSetLib {
     /// @dev Adds `value` to the set. Returns whether `value` was not in the set.
     function add(AddressSet storage set, address value) internal returns (bool result) {
         uint256 v = _addressWord(value);
-        uint256 rootPacked = set._values[0];
+        uint256 rootPacked = set._values.small[0].value;
         uint256 n = uint96(rootPacked);
         if (n == 0) {
             uint256 v0 = rootPacked >> 96;
             if (v0 == 0) {
-                set._values[0] = v << 96;
+                set._values.small[0].value = v << 96;
                 return true;
             }
             if (v0 == v) return false;
-            uint256 v1 = set._values[1] >> 96;
+            uint256 v1 = set._values.small[1].value >> 96;
             if (v1 == 0) {
-                set._values[1] = v << 96;
+                set._values.small[1].value = v << 96;
                 return true;
             }
             if (v1 == v) return false;
-            uint256 v2 = set._values[2] >> 96;
+            uint256 v2 = set._values.small[2].value >> 96;
             if (v2 == 0) {
-                set._values[2] = v << 96;
+                set._values.small[2].value = v << 96;
                 return true;
             }
             if (v2 == v) return false;
@@ -205,11 +221,11 @@ library EnumerableSetLib {
             result = true;
             set._positions[v] = n + 1;
             if (n == 0) {
-                set._values[0] = (v << 96) | 3;
+                set._values.small[0].value = (v << 96) | 3;
             } else {
-                set._values[n] = v << 96;
+                _entry(set._values, n).value = v << 96;
                 // The length bits are far below their maximum, so the sum stays in them.
-                set._values[0] = rootPacked + 2;
+                set._values.small[0].value = rootPacked + 2;
             }
         }
     }
@@ -219,21 +235,21 @@ library EnumerableSetLib {
         uint256 v = _word(value);
         uint256 n = set._lazyLength;
         if (n == 0) {
-            uint256 v0 = set._values[0];
+            uint256 v0 = set._values.small[0].value;
             if (v0 == 0) {
-                set._values[0] = v;
+                set._values.small[0].value = v;
                 return true;
             }
             if (v0 == v) return false;
-            uint256 v1 = set._values[1];
+            uint256 v1 = set._values.small[1].value;
             if (v1 == 0) {
-                set._values[1] = v;
+                set._values.small[1].value = v;
                 return true;
             }
             if (v1 == v) return false;
-            uint256 v2 = set._values[2];
+            uint256 v2 = set._values.small[2].value;
             if (v2 == 0) {
-                set._values[2] = v;
+                set._values.small[2].value = v;
                 return true;
             }
             if (v2 == v) return false;
@@ -244,7 +260,7 @@ library EnumerableSetLib {
         }
         if (set._positions[v] == 0) {
             n >>= 1;
-            set._values[n] = v;
+            _entry(set._values, n).value = v;
             set._positions[v] = n + 1;
             set._lazyLength = ((n + 1) << 1) | 1;
             result = true;
@@ -317,22 +333,22 @@ library EnumerableSetLib {
     /// @dev Removes `value` from the set. Returns whether `value` was in the set.
     function remove(AddressSet storage set, address value) internal returns (bool result) {
         uint256 v = _addressWord(value);
-        uint256 rootPacked = set._values[0];
+        uint256 rootPacked = set._values.small[0].value;
         uint256 n = uint96(rootPacked);
         if (n == 0) {
             if (rootPacked >> 96 == v) {
-                set._values[0] = set._values[1];
-                set._values[1] = set._values[2];
-                set._values[2] = 0;
+                set._values.small[0].value = set._values.small[1].value;
+                set._values.small[1].value = set._values.small[2].value;
+                set._values.small[2].value = 0;
                 return true;
             }
-            if (set._values[1] >> 96 == v) {
-                set._values[1] = set._values[2];
-                set._values[2] = 0;
+            if (set._values.small[1].value >> 96 == v) {
+                set._values.small[1].value = set._values.small[2].value;
+                set._values.small[2].value = 0;
                 return true;
             }
-            if (set._values[2] >> 96 == v) {
-                set._values[2] = 0;
+            if (set._values.small[2].value >> 96 == v) {
+                set._values.small[2].value = 0;
                 return true;
             }
             return false;
@@ -342,11 +358,11 @@ library EnumerableSetLib {
         // The index of the last element, which moves into the removed one's place.
         n = (n >> 1) - 1;
         if (position - 1 != n) {
-            uint256 lastValue = set._values[n] >> 96;
-            set._values[position - 1] = lastValue << 96;
+            uint256 lastValue = _entry(set._values, n).value >> 96;
+            _entry(set._values, position - 1).value = lastValue << 96;
             set._positions[lastValue] = position;
         }
-        set._values[0] = ((set._values[0] >> 96) << 96) | (n << 1) | 1;
+        set._values.small[0].value = ((set._values.small[0].value >> 96) << 96) | (n << 1) | 1;
         set._positions[v] = 0;
         result = true;
     }
@@ -356,19 +372,19 @@ library EnumerableSetLib {
         uint256 v = _word(value);
         uint256 n = set._lazyLength;
         if (n == 0) {
-            if (set._values[0] == v) {
-                set._values[0] = set._values[1];
-                set._values[1] = set._values[2];
-                set._values[2] = 0;
+            if (set._values.small[0].value == v) {
+                set._values.small[0].value = set._values.small[1].value;
+                set._values.small[1].value = set._values.small[2].value;
+                set._values.small[2].value = 0;
                 return true;
             }
-            if (set._values[1] == v) {
-                set._values[1] = set._values[2];
-                set._values[2] = 0;
+            if (set._values.small[1].value == v) {
+                set._values.small[1].value = set._values.small[2].value;
+                set._values.small[2].value = 0;
                 return true;
             }
-            if (set._values[2] == v) {
-                set._values[2] = 0;
+            if (set._values.small[2].value == v) {
+                set._values.small[2].value = 0;
                 return true;
             }
             return false;
@@ -378,8 +394,8 @@ library EnumerableSetLib {
         // The index of the last element, which moves into the removed one's place.
         n = (n >> 1) - 1;
         if (position - 1 != n) {
-            uint256 lastValue = set._values[n];
-            set._values[position - 1] = lastValue;
+            uint256 lastValue = _entry(set._values, n).value;
+            _entry(set._values, position - 1).value = lastValue;
             set._positions[lastValue] = position;
         }
         set._lazyLength = (n << 1) | 1;
@@ -448,7 +464,7 @@ library EnumerableSetLib {
     /// @dev Returns all of the values in the set.
     /// Note: This can consume more gas than the block gas limit for large sets.
     function values(AddressSet storage set) internal view returns (address[] memory result) {
-        uint256 rootPacked = set._values[0];
+        uint256 rootPacked = set._values.small[0].value;
         uint256 n = uint96(rootPacked);
         uint256 v0 = rootPacked >> 96;
         if (n == 0) {
@@ -457,10 +473,10 @@ library EnumerableSetLib {
             uint256 v2;
             if (v0 != 0) {
                 n = 1;
-                v1 = set._values[1] >> 96;
+                v1 = set._values.small[1].value >> 96;
                 if (v1 != 0) {
                     n = 2;
-                    v2 = set._values[2] >> 96;
+                    v2 = set._values.small[2].value >> 96;
                     if (v2 != 0) n = 3;
                 }
             }
@@ -474,7 +490,7 @@ library EnumerableSetLib {
         result = new address[](n);
         if (n != 0) result[0] = _wordAddress(v0);
         for (uint256 i = 1; i < n; ++i) {
-            result[i] = _wordAddress(set._values[i] >> 96);
+            result[i] = _wordAddress(_entry(set._values, i).value >> 96);
         }
     }
 
@@ -486,13 +502,13 @@ library EnumerableSetLib {
             // At most three values, in the root slot and the two after it.
             uint256 v1;
             uint256 v2;
-            uint256 v0 = set._values[0];
+            uint256 v0 = set._values.small[0].value;
             if (v0 != 0) {
                 n = 1;
-                v1 = set._values[1];
+                v1 = set._values.small[1].value;
                 if (v1 != 0) {
                     n = 2;
-                    v2 = set._values[2];
+                    v2 = set._values.small[2].value;
                     if (v2 != 0) n = 3;
                 }
             }
@@ -505,7 +521,7 @@ library EnumerableSetLib {
         n >>= 1;
         result = new bytes32[](n);
         for (uint256 i; i < n; ++i) {
-            result[i] = _wordValue(set._values[i]);
+            result[i] = _wordValue(_entry(set._values, i).value);
         }
     }
 
@@ -515,7 +531,7 @@ library EnumerableSetLib {
         uint256 n = length(set);
         result = new uint256[](n);
         for (uint256 i; i < n; ++i) {
-            result[i] = uint256(_wordValue(set._inner._values[i]));
+            result[i] = uint256(_wordValue(_entry(set._inner._values, i).value));
         }
     }
 
@@ -525,7 +541,7 @@ library EnumerableSetLib {
         uint256 n = length(set);
         result = new int256[](n);
         for (uint256 i; i < n; ++i) {
-            result[i] = int256(uint256(_wordValue(set._inner._values[i])));
+            result[i] = int256(uint256(_wordValue(_entry(set._inner._values, i).value)));
         }
     }
 
@@ -548,13 +564,13 @@ library EnumerableSetLib {
 
     /// @dev Returns the element at index `i` in the set. Reverts if `i` is out-of-bounds.
     function at(AddressSet storage set, uint256 i) internal view returns (address result) {
-        result = _wordAddress(set._values[i] >> 96);
+        result = _wordAddress(_entry(set._values, i).value >> 96);
         if (i >= length(set)) revert IndexOutOfBounds();
     }
 
     /// @dev Returns the element at index `i` in the set. Reverts if `i` is out-of-bounds.
     function at(Bytes32Set storage set, uint256 i) internal view returns (bytes32 result) {
-        result = _wordValue(set._values[i]);
+        result = _wordValue(_entry(set._values, i).value);
         if (i >= length(set)) revert IndexOutOfBounds();
     }
 
@@ -600,11 +616,11 @@ library EnumerableSetLib {
         result = NOT_FOUND;
         if (uint160(value) == _ZERO_SENTINEL) return result;
         uint256 v = _addressWord(value);
-        uint256 rootPacked = set._values[0];
+        uint256 rootPacked = set._values.small[0].value;
         if (uint96(rootPacked) == 0) {
             if (rootPacked >> 96 == v) return 0;
-            if (set._values[1] >> 96 == v) return 1;
-            if (set._values[2] >> 96 == v) return 2;
+            if (set._values.small[1].value >> 96 == v) return 1;
+            if (set._values.small[2].value >> 96 == v) return 2;
             return result;
         }
         uint256 position = set._positions[v];
@@ -617,9 +633,9 @@ library EnumerableSetLib {
         if (uint256(value) == _ZERO_SENTINEL) return result;
         uint256 v = _word(value);
         if (set._lazyLength == 0) {
-            if (set._values[0] == v) return 0;
-            if (set._values[1] == v) return 1;
-            if (set._values[2] == v) return 2;
+            if (set._values.small[0].value == v) return 0;
+            if (set._values.small[1].value == v) return 1;
+            if (set._values.small[2].value == v) return 2;
             return result;
         }
         uint256 position = set._positions[v];
@@ -679,5 +695,16 @@ library EnumerableSetLib {
     /// @dev The value a stored word stands for: the sentinel is zero.
     function _wordValue(uint256 v) private pure returns (bytes32) {
         return v == _ZERO_SENTINEL ? bytes32(0) : bytes32(v);
+    }
+
+    /// @dev Selects an entry without hashing the first three indices.
+    /// @custom:solar-inline
+    function _entry(Entries storage entries, uint256 i)
+        private
+        view
+        returns (Entry storage result)
+    {
+        if (i < 3) return entries.small[i];
+        return entries.large[i];
     }
 }
