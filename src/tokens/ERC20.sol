@@ -19,9 +19,8 @@ pragma solidity ^0.8.4;
 /// - Check that the overridden function is actually used in the function you want to
 ///   change the behavior of. Much of the code has been manually inlined for performance.
 ///
-/// The checked port keeps upstream's storage slots and words, so it is storage-compatible
-/// with it: the total supply at its fixed slot, and the balance, allowance and nonce slots
-/// hashed from the packed seeds, read and written through the trusted `_erc20Sload` and `_erc20Sstore`.
+/// The safe port uses Solidity-managed storage for the supply, balances, allowances and nonces.
+/// This storage layout is for new deployments, not upgrades from the original layout.
 /// Every operation keeps the assembly's order of checks, custom errors and events:
 /// `transferFrom` spends the allowance before it moves the balance, and neither it nor
 /// `transfer` goes through the overridable `_spendAllowance` or `_transfer`, as the assembly
@@ -82,40 +81,14 @@ abstract contract ERC20 {
     /*                          STORAGE                           */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
 
-    /// @dev The storage slot for the total supply.
-    uint256 private constant _TOTAL_SUPPLY_SLOT = 0x05345cdf77eb68f44c;
-
-    /// @dev The balance slot of `owner` is given by:
-    /// ```
-    ///     mstore(0x0c, _BALANCE_SLOT_SEED)
-    ///     mstore(0x00, owner)
-    ///     let balanceSlot := keccak256(0x0c, 0x20)
-    /// ```
-    uint256 private constant _BALANCE_SLOT_SEED = 0x87a211a2;
-
-    /// @dev The allowance slot of (`owner`, `spender`) is given by:
-    /// ```
-    ///     mstore(0x20, spender)
-    ///     mstore(0x0c, _ALLOWANCE_SLOT_SEED)
-    ///     mstore(0x00, owner)
-    ///     let allowanceSlot := keccak256(0x0c, 0x34)
-    /// ```
-    uint256 private constant _ALLOWANCE_SLOT_SEED = 0x7f5e9f20;
-
-    /// @dev The nonce slot of `owner` is given by:
-    /// ```
-    ///     mstore(0x0c, _NONCES_SLOT_SEED)
-    ///     mstore(0x00, owner)
-    ///     let nonceSlot := keccak256(0x0c, 0x20)
-    /// ```
-    uint256 private constant _NONCES_SLOT_SEED = 0x38377508;
+    uint256 private _erc20TotalSupply;
+    mapping(address => uint256) private _erc20Balances;
+    mapping(address => mapping(address => uint256)) private _erc20Allowances;
+    mapping(address => uint256) private _erc20Nonces;
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                         CONSTANTS                          */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
-
-    /// @dev `(_NONCES_SLOT_SEED << 16) | 0x1901`.
-    uint256 private constant _NONCES_SLOT_SEED_WITH_SIGNATURE_PREFIX = 0x383775081901;
 
     /// @dev `keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)")`.
     bytes32 private constant _DOMAIN_TYPEHASH =
@@ -158,12 +131,12 @@ abstract contract ERC20 {
 
     /// @dev Returns the amount of tokens in existence.
     function totalSupply() public view virtual returns (uint256 result) {
-        result = _erc20Sload(_TOTAL_SUPPLY_SLOT);
+        result = _erc20TotalSupply;
     }
 
     /// @dev Returns the amount of tokens owned by `owner`.
     function balanceOf(address owner) public view virtual returns (uint256 result) {
-        result = _erc20Sload(_erc20BalanceSlot(owner));
+        result = _erc20Balances[owner];
     }
 
     /// @dev Returns the amount of tokens that `spender` can spend on behalf of `owner`.
@@ -176,7 +149,7 @@ abstract contract ERC20 {
         if (_givePermit2InfiniteAllowance()) {
             if (spender == _PERMIT2) return type(uint256).max;
         }
-        result = _erc20Sload(_erc20AllowanceSlot(owner, spender));
+        result = _erc20Allowances[owner][spender];
     }
 
     /// @dev Sets `amount` as the allowance of `spender` over the caller's tokens.
@@ -189,8 +162,7 @@ abstract contract ERC20 {
                 revert Permit2AllowanceIsFixedAtInfinity();
             }
         }
-        // Compute the allowance slot and store the amount.
-        _erc20Sstore(_erc20AllowanceSlot(msg.sender, spender), amount);
+        _erc20Allowances[msg.sender][spender] = amount;
         emit Approval(msg.sender, spender, amount);
         return true;
     }
@@ -245,15 +217,13 @@ abstract contract ERC20 {
 
     /// @dev For inheriting contracts to increment the nonce.
     function _incrementNonce(address owner) internal virtual {
-        uint256 nonceSlot = _erc20NonceSlot(owner);
-        _erc20Sstore(nonceSlot, _erc20Add(1, _erc20Sload(nonceSlot)));
+        _erc20Nonces[owner] = _erc20Add(1, _erc20Nonces[owner]);
     }
 
     /// @dev Returns the current nonce for `owner`.
     /// This value is used to compute the signature for EIP-2612 permit.
     function nonces(address owner) public view virtual returns (uint256 result) {
-        // Compute the nonce slot and load its value.
-        result = _erc20Sload(_erc20NonceSlot(owner));
+        result = _erc20Nonces[owner];
     }
 
     /// @dev Sets `value` as the allowance of `spender` over the tokens of `owner`,
@@ -281,9 +251,7 @@ abstract contract ERC20 {
         bytes32 versionHash = _versionHash();
         // Revert if the block timestamp is greater than `deadline`.
         if (block.timestamp > deadline) revert PermitExpired();
-        // Compute the nonce slot and load its value.
-        uint256 nonceSlot = _erc20NonceSlot(owner);
-        uint256 nonceValue = _erc20Sload(nonceSlot);
+        uint256 nonceValue = _erc20Nonces[owner];
         bytes32 domainSeparator = keccak256(
             abi.encode(_DOMAIN_TYPEHASH, nameHash, versionHash, block.chainid, address(this))
         );
@@ -294,9 +262,8 @@ abstract contract ERC20 {
         // A failed recovery gives zero, which no signer recovers to.
         if (recovered == address(0) || recovered != owner) revert InvalidPermit();
         // Increment and store the updated nonce.
-        _erc20Sstore(nonceSlot, _erc20Add(nonceValue, 1));
-        // Compute the allowance slot and store the value.
-        _erc20Sstore(_erc20AllowanceSlot(owner, spender), value);
+        _erc20Nonces[owner] = _erc20Add(nonceValue, 1);
+        _erc20Allowances[owner][spender] = value;
         emit Approval(owner, spender, value);
     }
 
@@ -320,15 +287,13 @@ abstract contract ERC20 {
     /// Emits a {Transfer} event.
     function _mint(address to, uint256 amount) internal virtual {
         _beforeTokenTransfer(address(0), to, amount);
-        uint256 totalSupplyBefore = _erc20Sload(_TOTAL_SUPPLY_SLOT);
+        uint256 totalSupplyBefore = _erc20TotalSupply;
         uint256 totalSupplyAfter = _erc20Add(totalSupplyBefore, amount);
         // Revert if the total supply overflows.
         if (totalSupplyAfter < totalSupplyBefore) revert TotalSupplyOverflow();
         // Store the updated total supply.
-        _erc20Sstore(_TOTAL_SUPPLY_SLOT, totalSupplyAfter);
-        // Compute the balance slot, then add and store the updated balance.
-        uint256 toBalanceSlot = _erc20BalanceSlot(to);
-        _erc20Sstore(toBalanceSlot, _erc20Add(_erc20Sload(toBalanceSlot), amount));
+        _erc20TotalSupply = totalSupplyAfter;
+        _erc20Balances[to] = _erc20Add(_erc20Balances[to], amount);
         emit Transfer(address(0), to, amount);
         _afterTokenTransfer(address(0), to, amount);
     }
@@ -342,15 +307,13 @@ abstract contract ERC20 {
     /// Emits a {Transfer} event.
     function _burn(address from, uint256 amount) internal virtual {
         _beforeTokenTransfer(from, address(0), amount);
-        // Compute the balance slot and load its value.
-        uint256 fromBalanceSlot = _erc20BalanceSlot(from);
-        uint256 fromBalance = _erc20Sload(fromBalanceSlot);
+        uint256 fromBalance = _erc20Balances[from];
         // Revert if insufficient balance.
         if (amount > fromBalance) revert InsufficientBalance();
         // Subtract and store the updated balance.
-        _erc20Sstore(fromBalanceSlot, fromBalance - amount);
+        _erc20Balances[from] = fromBalance - amount;
         // Subtract and store the updated total supply.
-        _erc20Sstore(_TOTAL_SUPPLY_SLOT, _erc20Sub(_erc20Sload(_TOTAL_SUPPLY_SLOT), amount));
+        _erc20TotalSupply = _erc20Sub(_erc20TotalSupply, amount);
         emit Transfer(from, address(0), amount);
         _afterTokenTransfer(from, address(0), amount);
     }
@@ -389,8 +352,7 @@ abstract contract ERC20 {
                 revert Permit2AllowanceIsFixedAtInfinity();
             }
         }
-        // Compute the allowance slot and store the amount.
-        _erc20Sstore(_erc20AllowanceSlot(owner, spender), amount);
+        _erc20Allowances[owner][spender] = amount;
         emit Approval(owner, spender, amount);
     }
 
@@ -426,66 +388,27 @@ abstract contract ERC20 {
     /// @dev Moves `amount` from the balance of `from` to that of `to`, as `transfer`,
     /// `transferFrom` and `_transfer` do.
     function _erc20Move(address from, address to, uint256 amount) private {
-        // Compute the balance slot and load its value.
-        uint256 fromBalanceSlot = _erc20BalanceSlot(from);
-        uint256 fromBalance = _erc20Sload(fromBalanceSlot);
+        uint256 fromBalance = _erc20Balances[from];
         // Revert if insufficient balance.
         if (amount > fromBalance) revert InsufficientBalance();
         // Subtract and store the updated balance.
-        _erc20Sstore(fromBalanceSlot, fromBalance - amount);
-        // Compute the balance slot of `to`, then add and store its updated balance.
+        _erc20Balances[from] = fromBalance - amount;
+        // Read the recipient after the debit, so a self-transfer restores the balance.
         // Will not overflow because the sum of all user balances
         // cannot exceed the maximum uint256 value.
-        uint256 toBalanceSlot = _erc20BalanceSlot(to);
-        _erc20Sstore(toBalanceSlot, _erc20Add(_erc20Sload(toBalanceSlot), amount));
+        _erc20Balances[to] = _erc20Add(_erc20Balances[to], amount);
     }
 
     /// @dev Spends `amount` of the allowance of `spender` over the tokens of `owner`, as
     /// `transferFrom` and `_spendAllowance` do. A maximal allowance is never spent.
     function _erc20Use(address owner, address spender, uint256 amount) private {
-        // Compute the allowance slot and load its value.
-        uint256 allowanceSlot = _erc20AllowanceSlot(owner, spender);
-        uint256 allowance_ = _erc20Sload(allowanceSlot);
+        uint256 allowance_ = _erc20Allowances[owner][spender];
         // If the allowance is not the maximum uint256 value.
         if (allowance_ != type(uint256).max) {
             // Revert if the amount to be transferred exceeds the allowance.
             if (amount > allowance_) revert InsufficientAllowance();
             // Subtract and store the updated allowance.
-            _erc20Sstore(allowanceSlot, allowance_ - amount);
-        }
-    }
-
-    /// @dev The balance slot of `owner`: the hash of its address over `_BALANCE_SLOT_SEED`.
-    function _erc20BalanceSlot(address owner) private pure returns (uint256) {
-        return uint256(keccak256(abi.encodePacked(owner, uint96(_BALANCE_SLOT_SEED))));
-    }
-
-    /// @dev The allowance slot of (`owner`, `spender`): the hash of the owner's address over
-    /// `_ALLOWANCE_SLOT_SEED`, followed by the spender's address.
-    function _erc20AllowanceSlot(address owner, address spender) private pure returns (uint256) {
-        return uint256(keccak256(abi.encodePacked(owner, uint96(_ALLOWANCE_SLOT_SEED), spender)));
-    }
-
-    /// @dev The nonce slot of `owner`: the hash of its address over `_NONCES_SLOT_SEED`.
-    function _erc20NonceSlot(address owner) private pure returns (uint256) {
-        return uint256(keccak256(abi.encodePacked(owner, uint96(_NONCES_SLOT_SEED))));
-    }
-
-    /// @dev The word in storage slot `slot`. Solidity cannot name a slot it did not allocate.
-    /// @custom:solar-trusted
-    function _erc20Sload(uint256 slot) private view returns (uint256 value) {
-        /// @solidity memory-safe-assembly
-        assembly {
-            value := sload(slot)
-        }
-    }
-
-    /// @dev Stores `value` in storage slot `slot`.
-    /// @custom:solar-trusted
-    function _erc20Sstore(uint256 slot, uint256 value) private {
-        /// @solidity memory-safe-assembly
-        assembly {
-            sstore(slot, value)
+            _erc20Allowances[owner][spender] = allowance_ - amount;
         }
     }
 

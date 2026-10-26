@@ -137,4 +137,31 @@ contract ERC2981Test is SoladyTest {
         assertEq(receiver, expectedReceiver);
         assertEq(amount, expectedAmount);
     }
+
+    function testZeroFeeOverrideAndReset() public {
+        address defaultReceiver = address(1);
+        address tokenReceiver = address(2);
+        uint256 tokenId = type(uint256).max;
+        token.setDefaultRoyalty(defaultReceiver, 100);
+        token.setTokenRoyalty(tokenId, tokenReceiver, 0);
+        (address receiver, uint256 amount) = token.royaltyInfo(tokenId, 10000);
+        assertEq(receiver, tokenReceiver);
+        assertEq(amount, 0);
+        (receiver, amount) = token.royaltyInfo(0, 10000);
+        assertEq(receiver, defaultReceiver);
+        assertEq(amount, 100);
+
+        token.resetTokenRoyalty(tokenId);
+        (receiver, amount) = token.royaltyInfo(tokenId, 10000);
+        assertEq(receiver, defaultReceiver);
+        assertEq(amount, 100);
+        token.setTokenRoyalty(tokenId, tokenReceiver, 200);
+        token.deleteDefaultRoyalty();
+        (receiver, amount) = token.royaltyInfo(tokenId, 10000);
+        assertEq(receiver, tokenReceiver);
+        assertEq(amount, 200);
+        (receiver, amount) = token.royaltyInfo(0, 10000);
+        assertEq(receiver, address(0));
+        assertEq(amount, 0);
+    }
 }

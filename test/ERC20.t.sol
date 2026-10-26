@@ -522,6 +522,34 @@ contract ERC20Test is SoladyTest {
             mstore(sub(t, 0x20), m)
         }
     }
+
+    function testSelfTransferAtMaxSupply() public {
+        token.mint(address(this), type(uint256).max);
+        token.transfer(address(this), type(uint256).max);
+        assertEq(token.balanceOf(address(this)), type(uint256).max);
+        assertEq(token.totalSupply(), type(uint256).max);
+
+        address spender = address(0x1234);
+        token.approve(spender, 7);
+        vm.prank(spender);
+        token.transferFrom(address(this), address(this), 7);
+        assertEq(token.balanceOf(address(this)), type(uint256).max);
+        assertEq(token.allowance(address(this), spender), 0);
+        assertEq(token.nonces(address(this)), 0);
+        assertEq(token.name(), "Token");
+    }
+
+    function testTransferRevertRestoresAllowance() public {
+        address owner = address(0x1234);
+        vm.prank(owner);
+        token.approve(address(this), 7);
+        vm.expectRevert(ERC20.InsufficientBalance.selector);
+        token.transferFrom(owner, address(this), 7);
+        assertEq(token.allowance(owner, address(this)), 7);
+        assertEq(token.balanceOf(owner), 0);
+        assertEq(token.balanceOf(address(this)), 0);
+        assertEq(token.totalSupply(), 0);
+    }
 }
 
 contract ERC20Invariants is SoladyTest, InvariantTest {
