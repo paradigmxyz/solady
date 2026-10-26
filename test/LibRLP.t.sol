@@ -195,7 +195,7 @@ contract LibRLPTest is SoladyTest {
     }
 
     function _getUint256(LibRLP.List memory l, uint256 i) internal pure returns (uint256 result) {
-        result = l._items[i]._word;
+        result = (i == 0 ? l._first : i == 1 ? l._second : l._items[i - 2])._word;
     }
 
     function testRLPEncodeBytes() public {
@@ -646,10 +646,10 @@ contract LibRLPTest is SoladyTest {
     }
 
     function _checkMemory(LibRLP.List memory l) internal pure {
-        require(l._length <= l._items.length);
+        require(l._length <= l._items.length + 2);
         for (uint256 i; i < l._length; ++i) {
-            LibRLP.Item memory item = l._items[i];
-            if (item._kind == 3) _checkMemory(item._list);
+            LibRLP.Item memory item = i == 0 ? l._first : i == 1 ? l._second : l._items[i - 2];
+            if (item._kind == 3) _checkMemory(item._list[0]);
         }
         _checkMemory();
     }

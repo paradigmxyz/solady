@@ -10,6 +10,8 @@ pragma solidity ^0.8.13;
 /// @dev A pointer to a RLP item list in memory.
 struct List {
     // Do NOT modify these fields directly.
+    Item _first;
+    Item _second;
     Item[] _items;
     uint256 _length;
 }
@@ -19,7 +21,8 @@ struct Item {
     uint256 _kind;
     uint256 _word;
     bytes _bytes;
-    List _list;
+    // A singleton only for nested lists; other item kinds allocate no child list.
+    List[] _list;
 }
 
 using LibRLP for List global;
@@ -30,12 +33,13 @@ using LibRLP for Item global;
 /// @author Modified from Solmate (https://github.com/transmissions11/solmate/blob/main/src/utils/LibRLP.sol)
 /// @dev The assembly-free port uses typed items in a growable memory list. Appending keeps
 /// list and byte-string references, so changes to an appended value are visible when
-/// encoding, including an initially empty nested list. Short encodings pack into a word;
-/// longer lists measure their payloads before writing them. ABI envelopes produce exact
+/// encoding, including an initially empty nested list. The first two items are embedded;
+/// further items use a growable tail. Short encodings pack into a word, while longer lists
+/// measure their payloads before writing them. ABI envelopes produce exact
 /// lengths and zero padding without casting pointers or truncating allocations.
 /// The opaque `List` representation changes, but chaining and encoding semantics do not.
 /// `computeAddress` returns a clean address, where upstream leaves its upper bits dirty.
-/// @custom:solar-safe memory arithmetic
+/// @custom:solar-safe memory
 library LibRLP {
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                 CREATE ADDRESS PREDICTION                  */
@@ -137,28 +141,42 @@ library LibRLP {
     function p() internal pure returns (List memory result) {}
 
     /// @dev Returns a new list with `x` as the only element. Equivalent to `LibRLP.p().p(x)`.
+    /// @custom:solar-inline
     function p(uint256 x) internal pure returns (List memory result) {
-        p(result, x);
+        result = _newList();
+        result._first._word = x;
     }
 
     /// @dev Returns a new list with `x` as the only element. Equivalent to `LibRLP.p().p(x)`.
+    /// @custom:solar-inline
     function p(address x) internal pure returns (List memory result) {
-        p(result, x);
+        result = _newList();
+        result._first._kind = 4;
+        result._first._word = uint160(x);
     }
 
     /// @dev Returns a new list with `x` as the only element. Equivalent to `LibRLP.p().p(x)`.
+    /// @custom:solar-inline
     function p(bool x) internal pure returns (List memory result) {
-        p(result, x);
+        result = _newList();
+        result._first._word = x ? 1 : 0;
     }
 
     /// @dev Returns a new list with `x` as the only element. Equivalent to `LibRLP.p().p(x)`.
+    /// @custom:solar-inline
     function p(bytes memory x) internal pure returns (List memory result) {
-        p(result, x);
+        result = _newList();
+        result._first._kind = 2;
+        result._first._bytes = x;
     }
 
     /// @dev Returns a new list with `x` as the only element. Equivalent to `LibRLP.p().p(x)`.
+    /// @custom:solar-inline
     function p(List memory x) internal pure returns (List memory result) {
-        p(result, x);
+        result = _newList();
+        result._first._kind = 3;
+        result._first._list = new List[](1);
+        result._first._list[0] = x;
     }
 
     /// @dev Appends `x` to `list`. Returns `list` for function chaining.
@@ -198,14 +216,20 @@ library LibRLP {
     function p(List memory list, List memory x) internal pure returns (List memory result) {
         Item memory item = _append(list);
         item._kind = 3;
-        item._list = x;
+        item._list = new List[](1);
+        item._list[0] = x;
         result = list;
     }
 
     /// @dev Returns the RLP encoding of `list`.
     function encode(List memory list) internal pure returns (bytes memory result) {
         (uint256 word, uint256 length) = _packList(list);
-        if (length <= 31) return _encodedWord(((0xc0 + length) << 248) | (word >> 8), length + 1);
+        if (length <= 31) {
+            // The one-byte prefix and total length are bounded by the packed payload.
+            unchecked {
+                return _encodedWord(((0xc0 + length) << 248) | (word >> 8), length + 1);
+            }
+        }
         uint256 n = _payloadLength(list);
         result = new bytes(_prefixLength(n) + n);
         _writeList(result, 0, list, n);
@@ -249,25 +273,45 @@ library LibRLP {
     /*                      PRIVATE HELPERS                       */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
 
+    /// @dev Initializes the first embedded item; the second needs no further allocation.
+    /// @custom:solar-inline
+    function _newList() private pure returns (List memory result) {
+        result._length = 1;
+    }
+
     /// @dev Appends an item, preserving the identity of lists and existing items when growing.
     /// @custom:solar-inline
     function _append(List memory list) private pure returns (Item memory item) {
-        uint256 n = list._length;
-        if (n == list._items.length) {
-            Item[] memory items = new Item[](n == 0 ? 2 : n * 2);
-            for (uint256 i; i < n; ++i) {
-                items[i] = list._items[i];
+        // The index and doubled capacity fit whenever the backing allocation can exist.
+        unchecked {
+            uint256 n = list._length;
+            list._length = n + 1;
+            if (n == 0) return list._first;
+            if (n == 1) return list._second;
+            n -= 2;
+            if (n == list._items.length) {
+                Item[] memory items = new Item[](n == 0 ? 2 : n * 2);
+                for (uint256 i; i < n; ++i) {
+                    items[i] = list._items[i];
+                }
+                list._items = items;
             }
-            list._items = items;
+            item = list._items[n];
         }
-        list._length = n + 1;
-        item = list._items[n];
+    }
+
+    /// @dev The first two items are embedded; longer lists use the growable tail.
+    /// @custom:solar-inline
+    function _item(List memory list, uint256 i) private pure returns (Item memory) {
+        if (i == 0) return list._first;
+        if (i == 1) return list._second;
+        return list._items[i - 2];
     }
 
     /// @dev Counts the encoded bytes of the items, excluding this list's prefix.
     function _payloadLength(List memory list) private pure returns (uint256 n) {
         for (uint256 i; i < list._length; ++i) {
-            Item memory item = list._items[i];
+            Item memory item = _item(list, i);
             if (item._kind == 0) {
                 n += item._word <= 0x7f ? 1 : 1 + _byteLength(item._word);
             } else if (item._kind == 4) {
@@ -276,7 +320,7 @@ library LibRLP {
                 bytes memory x = item._bytes;
                 n += x.length == 1 && uint8(x[0]) < 0x80 ? 1 : _prefixLength(x.length) + x.length;
             } else {
-                uint256 k = _payloadLength(item._list);
+                uint256 k = _payloadLength(item._list[0]);
                 n += _prefixLength(k) + k;
             }
         }
@@ -290,7 +334,7 @@ library LibRLP {
     {
         o = _writePrefix(out, o, n, 0xc0);
         for (uint256 i; i < list._length; ++i) {
-            Item memory item = list._items[i];
+            Item memory item = _item(list, i);
             if (item._kind == 0) {
                 o = _writeUint(out, o, item._word);
             } else if (item._kind == 4) {
@@ -304,7 +348,7 @@ library LibRLP {
                     out[o++] = x[j];
                 }
             } else {
-                o = _writeList(out, o, item._list, _payloadLength(item._list));
+                o = _writeList(out, o, item._list[0], _payloadLength(item._list[0]));
             }
         }
         return o;
@@ -362,12 +406,15 @@ library LibRLP {
     /// logarithm plus one, by the binary search of `log2` to whole bytes.
     /// @custom:solar-inline
     function _byteLength(uint256 x) private pure returns (uint256) {
-        uint256 r = (x > type(uint128).max ? 1 : 0) << 7;
-        r |= ((x >> r) > type(uint64).max ? 1 : 0) << 6;
-        r |= ((x >> r) > type(uint32).max ? 1 : 0) << 5;
-        r |= ((x >> r) > type(uint16).max ? 1 : 0) << 4;
-        r |= ((x >> r) > type(uint8).max ? 1 : 0) << 3;
-        return (r >> 3) + 1;
+        // The shift counts are at most 248, and the result is at most 32.
+        unchecked {
+            uint256 r = (x > type(uint128).max ? 1 : 0) << 7;
+            r |= ((x >> r) > type(uint64).max ? 1 : 0) << 6;
+            r |= ((x >> r) > type(uint32).max ? 1 : 0) << 5;
+            r |= ((x >> r) > type(uint16).max ? 1 : 0) << 4;
+            r |= ((x >> r) > type(uint8).max ? 1 : 0) << 3;
+            return (r >> 3) + 1;
+        }
     }
 
     /// @dev The address in the low 20 bytes of the hash `h`.
@@ -382,43 +429,47 @@ library LibRLP {
 
     /// @dev Packs a short list into a left-aligned word; a length of 32 requests the general path.
     function _packList(List memory list) private pure returns (uint256 word, uint256 length) {
-        for (uint256 i; i < list._length; ++i) {
-            Item memory item = list._items[i];
-            uint256 w;
-            uint256 n;
-            if (item._kind == 0) {
-                uint256 x = item._word;
-                if (x <= 0x7f) {
-                    w = (x == 0 ? 0x80 : x) << 248;
-                    n = 1;
-                } else {
-                    n = _byteLength(x);
-                    if (n >= 31) return (0, 32);
-                    w = ((0x80 + n) << 248) | (x << (248 - 8 * n));
-                    ++n;
-                }
-            } else if (item._kind == 4) {
-                w = (uint256(0x94) << 248) | (item._word << 88);
-                n = 21;
-            } else if (item._kind == 2) {
-                bytes memory x = item._bytes;
-                n = x.length;
-                if (n == 1 && uint8(x[0]) < 0x80) {
-                    w = uint256(uint8(x[0])) << 248;
-                } else {
-                    if (n >= 31) return (0, 32);
-                    w = (0x80 + n) << 248;
-                    for (uint256 j; j < n; ++j) {
-                        w |= uint256(uint8(x[j])) << (240 - 8 * j);
-                    }
-                    ++n;
-                }
-            } else {
-                return (0, 32);
-            }
+        // Each item reports at most 32 bytes; reject totals above 31 before packing them.
+        unchecked {
+            if (list._length == 0) return (0, 0);
+            (word, length) = _packItem(list._first);
+            if (length == 32 || list._length == 1) return (word, length);
+            (uint256 w, uint256 n) = _packItem(list._second);
             if (length + n > 31) return (0, 32);
             word |= w >> (8 * length);
             length += n;
+            for (uint256 i = 2; i < list._length; ++i) {
+                (w, n) = _packItem(list._items[i - 2]);
+                if (length + n > 31) return (0, 32);
+                word |= w >> (8 * length);
+                length += n;
+            }
+        }
+    }
+
+    /// @dev Packs one item into a word, or returns length 32 when a list cannot hold it.
+    /// @custom:solar-noinline
+    function _packItem(Item memory item) private pure returns (uint256 w, uint256 n) {
+        // Each packed item occupies at most 31 bytes, so the shift counts and prefixes fit.
+        unchecked {
+            if (item._kind == 0) {
+                uint256 x = item._word;
+                if (x <= 0x7f) return ((x == 0 ? 0x80 : x) << 248, 1);
+                if (x <= type(uint8).max) return ((uint256(0x81) << 248) | (x << 240), 2);
+                n = _byteLength(x);
+                if (n >= 31) return (0, 32);
+                return (((0x80 + n) << 248) | (x << (248 - 8 * n)), n + 1);
+            }
+            if (item._kind == 4) return ((uint256(0x94) << 248) | (item._word << 88), 21);
+            if (item._kind == 2) {
+                bytes memory x = item._bytes;
+                n = x.length;
+                if (n == 1 && uint8(x[0]) < 0x80) return (uint256(uint8(x[0])) << 248, 1);
+                if (n >= 31) return (0, 32);
+                // Converting dynamic bytes to bytes32 clears the unused low bytes.
+                return (((0x80 + n) << 248) | (uint256(bytes32(x)) >> 8), n + 1);
+            }
+            return (0, 32);
         }
     }
 }
