@@ -668,4 +668,19 @@ contract DynamicArrayLibTest is SoladyTest {
             }
         }
     }
+
+    function testUint256ViewKeepsAliasing() public {
+        DynamicArrayLib.DynamicArray memory a;
+        assertEq(a.asUint256Array().length, 0);
+        a.reserve(4);
+        a.p(11).p(22);
+        uint256[] memory viewOfData = a.asUint256Array();
+        viewOfData[0] = 33;
+        assertEq(a.get(0), 33);
+        a.set(1, 44);
+        assertEq(viewOfData[1], 44);
+        a.p(55);
+        assertEq(viewOfData.length, 3);
+        assertEq(viewOfData[2], 55);
+    }
 }

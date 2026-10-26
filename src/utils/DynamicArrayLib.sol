@@ -675,12 +675,8 @@ library DynamicArrayLib {
     }
 
     /// @dev Returns the underlying array as a `uint256[]`.
-    /// @custom:solar-trusted
     function asUint256Array(DynamicArray memory a) internal pure returns (uint256[] memory result) {
-        /// @solidity memory-safe-assembly
-        assembly {
-            result := mload(a)
-        }
+        result = a.data;
     }
 
     /// @dev Returns the underlying array as a `address[]`.
