@@ -936,4 +936,58 @@ contract EnumerableSetLibTest is SoladyTest {
             result := or(a, shl(160, dirt))
         }
     }
+
+    function testTypedSetOrderAcrossIndexInitialization() public {
+        _addToAllTypedSets(1);
+        _addToAllTypedSets(2);
+        _addToAllTypedSets(3);
+        _removeFromAllTypedSets(1);
+        _assertTypedSetAt(0, 2);
+        _assertTypedSetAt(1, 3);
+        _addToAllTypedSets(4);
+        _addToAllTypedSets(5);
+        _removeFromAllTypedSets(2);
+        _assertTypedSetAt(0, 5);
+        _assertTypedSetAt(1, 3);
+        _assertTypedSetAt(2, 4);
+        _removeFromAllTypedSets(5);
+        _removeFromAllTypedSets(3);
+        _removeFromAllTypedSets(4);
+        _addToAllTypedSets(0);
+        _addToAllTypedSets(7);
+        _assertTypedSetAt(0, 0);
+        _assertTypedSetAt(1, 7);
+        assertEq(addressSet2.length(), 0);
+        assertEq(bytes32Set2.length(), 0);
+        assertEq(uint8Set.length(), 0);
+    }
+
+    function _addToAllTypedSets(uint256 value) private {
+        assertTrue(addressSet.add(address(uint160(value))));
+        assertTrue(bytes32Set.add(bytes32(value)));
+        assertTrue(uint256Set.add(value));
+        assertTrue(int256Set.add(int256(value)));
+    }
+
+    function _removeFromAllTypedSets(uint256 value) private {
+        assertTrue(addressSet.remove(address(uint160(value))));
+        assertTrue(bytes32Set.remove(bytes32(value)));
+        assertTrue(uint256Set.remove(value));
+        assertTrue(int256Set.remove(int256(value)));
+    }
+
+    function _assertTypedSetAt(uint256 index, uint256 value) private {
+        assertEq(addressSet.at(index), address(uint160(value)));
+        assertEq(addressSet.values()[index], address(uint160(value)));
+        assertEq(addressSet.indexOf(address(uint160(value))), index);
+        assertEq(bytes32Set.at(index), bytes32(value));
+        assertEq(bytes32Set.values()[index], bytes32(value));
+        assertEq(bytes32Set.indexOf(bytes32(value)), index);
+        assertEq(uint256Set.at(index), value);
+        assertEq(uint256Set.values()[index], value);
+        assertEq(uint256Set.indexOf(value), index);
+        assertEq(int256Set.at(index), int256(value));
+        assertEq(int256Set.values()[index], int256(value));
+        assertEq(int256Set.indexOf(int256(value)), index);
+    }
 }
