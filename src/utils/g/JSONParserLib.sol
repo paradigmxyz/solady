@@ -9,25 +9,31 @@ pragma solidity ^0.8.13;
 
 /// @dev A pointer to a parsed JSON node.
 struct Item {
-    // Do NOT modify the `_data` directly.
+    // Do NOT modify these fields directly.
     uint256 _data;
+    Tree[] _tree;
+    string _key;
+    string _value;
+    Item[] _children;
+}
+
+/// @dev Shared node table. A singleton array makes a default item's reference empty.
+struct Tree {
+    bytes _source;
+    Item[] _items;
+    uint256 _length;
 }
 
 using JSONParserLib for Item global;
+using JSONParserLib for Tree global;
 
 /// @notice Library for parsing JSONs.
 /// @author Solady (https://github.com/vectorized/solady/blob/main/src/utils/g/JSONParserLib.sol)
-/// @dev The checked port keeps upstream's items. Each is one word that packs the
-/// parsed string's address; the value and the key as offsets into the string, or,
-/// once read, as the addresses of their cached copies; the last child, or, once read,
-/// the children array; and the previous sibling, which reading the children turns
-/// into the parent. Trusted casts follow these addresses, so, as upstream says,
-/// `_data` must not be modified. The parser is checked Solidity and iterative rather
-/// than recursive: it creates the items in document order, and an open array or
-/// object keeps its parent's address in its value length until it closes. Strings are
-/// scanned and decoded a word at a time, and the integer parsers take 32 digits a word.
-/// Nothing reads past the string, so a string that ends in a backslash fails at once,
-/// where upstream scans on past the end until it fails.
+/// @dev The assembly-free port keeps typed references to the source, nodes, and lazy caches.
+/// The iterative parser packs source offsets and node indices rather than memory addresses.
+/// Growing the node table preserves node identity. Reading children links them to their parent,
+/// and repeated reads share the same cached array and strings. The opaque `Item` layout changes.
+/// Strings and numeric values retain the checked parser's grammar and overflow checks.
 /// @custom:solar-safe memory arithmetic
 library JSONParserLib {
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
@@ -68,7 +74,7 @@ library JSONParserLib {
 
     // Private constants for packing `_data`.
 
-    uint256 private constant _BITPOS_STRING = 32 * 7 - 8;
+    uint256 private constant _BITPOS_ID = 32 * 7 - 8;
     uint256 private constant _BITPOS_KEY_LENGTH = 32 * 6 - 8;
     uint256 private constant _BITPOS_KEY = 32 * 5 - 8;
     uint256 private constant _BITPOS_VALUE_LENGTH = 32 * 4 - 8;
@@ -135,9 +141,10 @@ library JSONParserLib {
     /// Do NOT pass in a string that WILL be modified later on.
     function parse(string memory s) internal pure returns (Item memory result) {
         bytes memory b = bytes(s);
-        // Every item packs the string's address, and offsets below its length.
-        _pointer(_addr(b));
+        // Offsets and node indices fit in their packed 32-bit fields.
         _pointer(b.length);
+        Tree[] memory tree = new Tree[](1);
+        tree[0]._source = b;
         // The innermost open array or object, or zero.
         uint256 cur;
         // The previous sibling of the next item, or zero.
@@ -148,12 +155,12 @@ library JSONParserLib {
         (uint256 p, uint256 c) = _skipWhitespace(b, 0);
         while (true) {
             if (p >= b.length) _fail();
-            uint256 data = (_addr(b) << _BITPOS_STRING) | meta | (last << _BITPOS_SIBLING_OR_PARENT)
-                | (p << _BITPOS_VALUE);
+            uint256 data = meta | (last << _BITPOS_SIBLING_OR_PARENT) | (p << _BITPOS_VALUE);
             if (c == 91 || c == 123) {
-                // '[' or '{'. Until it closes, its value length holds its parent.
+                // '[' or '{'. Until it closes, its value length holds its parent's index.
                 bool opensArray = c == 91;
                 cur = _newItem(
+                    tree,
                     data | (cur << _BITPOS_VALUE_LENGTH) | (opensArray ? TYPE_ARRAY : TYPE_OBJECT)
                 );
                 last = 0;
@@ -176,7 +183,7 @@ library JSONParserLib {
                 } else {
                     (end, t) = _parseLiteral(b, p);
                 }
-                last = _newItem(data | ((end - p) << _BITPOS_VALUE_LENGTH) | t);
+                last = _newItem(tree, data | ((end - p) << _BITPOS_VALUE_LENGTH) | t);
                 // Only a number has read the byte at its end.
                 if (t != TYPE_NUMBER || (_WHITESPACE >> c) & 1 != 0) {
                     (p, c) = _skipWhitespace(b, end);
@@ -188,7 +195,7 @@ library JSONParserLib {
             while (true) {
                 if (cur == 0) {
                     if (p < b.length) _fail();
-                    return _item(last);
+                    return _item(tree, last);
                 }
                 bool inArray = meta & _PARENT_IS_ARRAY != 0;
                 if (c == 44) {
@@ -200,17 +207,17 @@ library JSONParserLib {
                 }
                 if (c != (inArray ? 93 : 125)) _fail();
                 // The value length replaces the parent, and the last child is `last`.
-                Item memory container = _item(cur);
+                Item memory container = _item(tree, cur);
                 uint256 d = container._data;
-                uint256 parentAddress = (d >> _BITPOS_VALUE_LENGTH) & _BITMASK_POINTER;
+                uint256 parentIndex = (d >> _BITPOS_VALUE_LENGTH) & _BITMASK_POINTER;
                 uint256 length = ++p - ((d >> _BITPOS_VALUE) & _BITMASK_POINTER);
-                container._data = (d ^ (parentAddress << _BITPOS_VALUE_LENGTH))
+                container._data = (d ^ (parentIndex << _BITPOS_VALUE_LENGTH))
                     | (length << _BITPOS_VALUE_LENGTH) | (last << _BITPOS_CHILD);
                 // The parent's next item comes after `cur`, whose own parent flag, and
                 // index or key, it continues from.
                 meta = d & _META;
                 last = cur;
-                cur = parentAddress;
+                cur = parentIndex;
                 (p, c) = _skipWhitespace(b, p);
             }
         }
@@ -270,28 +277,26 @@ library JSONParserLib {
         uint256 d = item._data;
         uint256 t = d & _BITMASK_TYPE;
         if (t != TYPE_ARRAY && t != TYPE_OBJECT) return result;
+        if (d & _CHILDREN_INITED != 0) return item._children;
         uint256 h = (d >> _BITPOS_CHILD) & _BITMASK_POINTER;
-        if (d & _CHILDREN_INITED != 0) return _items(h);
+        Tree[] memory tree = item._tree;
         // The children are linked from the last, each to its previous sibling.
         uint256 m;
         for (uint256 q = h; q != 0; ++m) {
-            q = (_item(q)._data >> _BITPOS_SIBLING_OR_PARENT) & _BITMASK_POINTER;
+            q = (_item(tree, q)._data >> _BITPOS_SIBLING_OR_PARENT) & _BITMASK_POINTER;
         }
-        uint256[] memory a = new uint256[](m);
-        uint256 self = _pointer(_addr(item));
+        result = new Item[](m);
+        uint256 self = (d >> _BITPOS_ID) & _BITMASK_POINTER;
         while (m != 0) {
-            a[--m] = h;
-            Item memory child = _item(h);
+            Item memory child = _item(tree, h);
+            result[--m] = child;
             uint256 q = child._data;
             h = (q >> _BITPOS_SIBLING_OR_PARENT) & _BITMASK_POINTER;
             // The previous sibling's place now holds the parent.
             child._data = q ^ ((h ^ self) << _BITPOS_SIBLING_OR_PARENT);
         }
-        uint256 arrayAddress = _pointer(_addr(a));
-        item._data = d
-            ^ ((((d >> _BITPOS_CHILD) & _BITMASK_POINTER) ^ arrayAddress) << _BITPOS_CHILD)
-            | _CHILDREN_INITED;
-        result = _items(arrayAddress);
+        item._children = result;
+        item._data = d | _CHILDREN_INITED;
     }
 
     /// @dev Returns the number of children.
@@ -378,7 +383,7 @@ library JSONParserLib {
     /// If the item does not have a parent, the result's type will be undefined.
     function parent(Item memory item) internal pure returns (Item memory result) {
         uint256 p = (item._data >> _BITPOS_SIBLING_OR_PARENT) & _BITMASK_POINTER;
-        if (p != 0) result = _item(p);
+        if (p != 0) result = _item(item._tree, p);
     }
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
@@ -498,8 +503,7 @@ library JSONParserLib {
         }
         // Clear what the whole words wrote past the end.
         _writeBytes32(out, o, 0);
-        _setLength(out, o);
-        result = string(out);
+        result = string(_prefix(out, o));
     }
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
@@ -512,17 +516,29 @@ library JSONParserLib {
     }
 
     /// @dev Returns `p`, which reverts, as upstream does, if it does not fit the 32 bits
-    /// it is packed into. No string offset or memory address reaches that in practice.
+    /// it is packed into. No source offset or node index reaches that in practice.
     /// @custom:solar-inline
     function _pointer(uint256 p) private pure returns (uint256) {
         if (p > _BITMASK_POINTER) revert();
         return p;
     }
 
-    /// @dev Allocates an item holding `data`, and returns its address.
-    /// @custom:solar-inline
-    function _newItem(uint256 data) private pure returns (uint256) {
-        return _pointer(_addr(Item(data)));
+    /// @dev Appends a node and returns its one-based index. Existing node references survive growth.
+    function _newItem(Tree[] memory tree, uint256 data) private pure returns (uint256 id) {
+        Tree memory t = tree[0];
+        uint256 n = t._length;
+        id = _pointer(n + 1);
+        if (n == t._items.length) {
+            Item[] memory items = new Item[](n == 0 ? 4 : n * 2);
+            for (uint256 i; i < n; ++i) {
+                items[i] = t._items[i];
+            }
+            t._items = items;
+        }
+        Item memory item = t._items[n];
+        item._data = data | (id << _BITPOS_ID);
+        item._tree = tree;
+        t._length = id;
     }
 
     /// @dev Returns the first position from `p` on that is not whitespace, and its byte,
@@ -715,17 +731,15 @@ library JSONParserLib {
     {
         uint256 d = item._data;
         if (d == 0) return result;
+        if (d & inited != 0) return inited == _KEY_INITED ? item._key : item._value;
         uint256 o = (d >> bitpos) & _BITMASK_POINTER;
-        if (d & inited != 0) return _string(o);
-        bytes memory s = bytes(_string((d >> _BITPOS_STRING) & _BITMASK_POINTER));
         uint256 n = (d >> bitposLength) & _BITMASK_POINTER;
-        // Whole words, cut to `n` bytes after the copy: legacy solc's `new bytes(n)` clears only
-        // `n` bytes, and the rest of the last word must read as zero padding.
-        bytes memory copy = _newPadded(n);
-        _copyFresh(copy, s, o, n);
-        uint256 copyAddress = _pointer(_addr(copy));
-        item._data = d ^ ((o ^ copyAddress) << bitpos) | inited;
-        result = string(copy);
+        bytes memory copy = new bytes((n + 31) & ~uint256(31));
+        _copyFresh(copy, item._tree[0]._source, o, n);
+        result = string(_prefix(copy, n));
+        if (inited == _KEY_INITED) item._key = result;
+        else item._value = result;
+        item._data = d | inited;
     }
 
     /// @dev Decodes the 4 hexadecimal digits at `i`, which must end by `end`.
@@ -912,89 +926,14 @@ library JSONParserLib {
         }
     }
 
-    /// @dev The address of `item`.
-    /// @custom:solar-trusted
+    /// @dev Looks up a nonzero node index in the shared table.
     /// @custom:solar-inline
-    function _addr(Item memory item) private pure returns (uint256 result) {
-        /// @solidity memory-safe-assembly
-        assembly {
-            result := item
-        }
+    function _item(Tree[] memory tree, uint256 id) private pure returns (Item memory) {
+        return tree[0]._items[id - 1];
     }
 
-    /// @dev The address of `a`.
-    /// @custom:solar-trusted
-    /// @custom:solar-inline
-    function _addr(uint256[] memory a) private pure returns (uint256 result) {
-        /// @solidity memory-safe-assembly
-        assembly {
-            result := a
-        }
-    }
-
-    /// @dev The address of `s`.
-    /// @custom:solar-trusted
-    /// @custom:solar-inline
-    function _addr(bytes memory s) private pure returns (uint256 result) {
-        /// @solidity memory-safe-assembly
-        assembly {
-            result := s
-        }
-    }
-
-    /// @dev The item at `p`, an item's address that an item's packed data holds.
-    /// @custom:solar-trusted
-    /// @custom:solar-inline
-    function _item(uint256 p) private pure returns (Item memory result) {
-        /// @solidity memory-safe-assembly
-        assembly {
-            result := p
-        }
-    }
-
-    /// @dev The children at `p`, the address of an array of items' addresses that an
-    /// item's packed data holds.
-    /// @custom:solar-trusted
-    /// @custom:solar-inline
-    function _items(uint256 p) private pure returns (Item[] memory result) {
-        /// @solidity memory-safe-assembly
-        assembly {
-            result := p
-        }
-    }
-
-    /// @dev The string at `p`, the parsed string's address or a cached copy's that an
-    /// item's packed data holds.
-    /// @custom:solar-trusted
-    /// @custom:solar-inline
-    function _string(uint256 p) private pure returns (string memory result) {
-        /// @solidity memory-safe-assembly
-        assembly {
-            result := p
-        }
-    }
-
-    /// @dev A fresh buffer of `n` bytes in whole words, zero past `n` in its last word under every
-    /// compiler: legacy solc's `new bytes(n)` clears only `n` bytes.
-    /// @custom:solar-trusted
-    /// @custom:solar-inline
-    function _newPadded(uint256 n) private pure returns (bytes memory b) {
-        b = new bytes((n + 31) & ~uint256(31));
-        /// @solidity memory-safe-assembly
-        assembly {
-            mstore(b, n)
-        }
-    }
-
-    /// @dev Shrinks `b` to its first `n` bytes in place. The caller has cleared the bytes
-    /// past `n` in its last word, so they read as zero padding.
-    /// @custom:solar-trusted
-    /// @custom:solar-inline
-    function _setLength(bytes memory b, uint256 n) private pure {
-        if (n > b.length) _fail();
-        /// @solidity memory-safe-assembly
-        assembly {
-            mstore(b, n)
-        }
+    /// @dev Copies an exact prefix with zero padding. The caller cleared the last partial word.
+    function _prefix(bytes memory b, uint256 n) private pure returns (bytes memory) {
+        return abi.decode(abi.encodePacked(uint256(32), n, b), (bytes));
     }
 }
