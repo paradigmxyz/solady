@@ -58,6 +58,31 @@ contract ERC20VotesTest is SoladyTest {
         erc20Votes.checkpointAt(_BOB, values.length);
     }
 
+    function testCheckpointNamespacesAndHistory() public {
+        uint256 start = vm.getBlockNumber();
+        address high = address(type(uint160).max);
+        address low = address(1);
+        erc20Votes.directDelegate(_ALICE, high);
+        erc20Votes.directDelegate(_CHARLIE, low);
+        uint256 amount = (uint256(1) << 160) + 7;
+        for (uint256 i; i < 12; ++i) {
+            vm.roll(start + i);
+            erc20Votes.mint(_ALICE, amount);
+            erc20Votes.mint(_CHARLIE, 3);
+        }
+        vm.roll(start + 12);
+        assertEq(erc20Votes.getPastVotes(high, start - 1), 0);
+        for (uint256 i; i < 12; ++i) {
+            assertEq(erc20Votes.getPastVotes(high, start + i), amount * (i + 1));
+            assertEq(erc20Votes.getPastVotes(low, start + i), 3 * (i + 1));
+            assertEq(erc20Votes.getPastVotesTotalSupply(start + i), (amount + 3) * (i + 1));
+            _checkCheckpointAt(high, i, start + i, amount * (i + 1));
+            _checkCheckpointAt(low, i, start + i, 3 * (i + 1));
+        }
+        assertEq(erc20Votes.getVotes(address(0)), 0);
+        assertEq(erc20Votes.getVotesTotalSupply(), (amount + 3) * 12);
+    }
+
     function testMintTransferBurnDelegate() public {
         uint256 initialBlockNumber = vm.getBlockNumber();
         erc20Votes.mint(_ALICE, 1 ether);

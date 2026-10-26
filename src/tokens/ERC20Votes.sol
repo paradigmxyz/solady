@@ -77,10 +77,12 @@ abstract contract ERC20Votes is ERC20 {
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
 
     mapping(address => uint256) private _erc20VotesDelegates;
-    mapping(uint256 => mapping(uint256 => uint256)) private _erc20VotesCheckpoints;
+    mapping(uint256 => uint256) private _erc20VotesCheckpoints;
 
-    // Outside the address domain, including the zero address.
-    uint256 private constant _ERC20_VOTES_TOTAL = 1 << 160;
+    // Low 48 bits hold the index, the next 160 the delegate. Total supply uses bit 208.
+    // Complemented keys hold full-width values; their top 47 bits distinguish them from
+    // every checkpoint key. This keeps each access to one mapping hash.
+    uint256 private constant _ERC20_VOTES_TOTAL = 1 << 208;
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                          ERC6372                           */
@@ -104,7 +106,7 @@ abstract contract ERC20Votes is ERC20 {
 
     /// @dev Returns the latest amount of voting units for `account`.
     function getVotes(address account) public view virtual returns (uint256) {
-        return _checkpointLatest(_erc20VotesCheckpoints[uint160(account)]);
+        return _checkpointLatest(uint256(uint160(account)) << 48);
     }
 
     /// @dev Returns the latest amount of voting units `account` has before or during `timepoint`.
@@ -115,7 +117,7 @@ abstract contract ERC20Votes is ERC20 {
         returns (uint256)
     {
         if (timepoint >= clock()) _revertERC5805FutureLookup();
-        return _checkpointUpperLookupRecent(_erc20VotesCheckpoints[uint160(account)], timepoint);
+        return _checkpointUpperLookupRecent(uint256(uint160(account)) << 48, timepoint);
     }
 
     /// @dev Returns the current voting delegate of `delegator`.
@@ -167,7 +169,7 @@ abstract contract ERC20Votes is ERC20 {
 
     /// @dev Returns the number of checkpoints for `account`.
     function checkpointCount(address account) public view virtual returns (uint256 result) {
-        result = uint48(_erc20VotesCheckpoints[uint160(account)][0] >> 48);
+        result = uint48(_erc20VotesCheckpoints[uint256(uint160(account)) << 48] >> 48);
     }
 
     /// @dev Returns the voting checkpoint for `account` at index `i`.
@@ -177,23 +179,23 @@ abstract contract ERC20Votes is ERC20 {
         virtual
         returns (uint48 checkpointClock, uint256 checkpointValue)
     {
-        mapping(uint256 => uint256) storage checkpoints = _erc20VotesCheckpoints[uint160(account)];
-        uint256 lengthSlotPacked = checkpoints[0];
+        uint256 base = uint256(uint160(account)) << 48;
+        uint256 lengthSlotPacked = _erc20VotesCheckpoints[base];
         if (i >= uint48(lengthSlotPacked >> 48)) revert ERC5805CheckpointIndexOutOfBounds();
-        uint256 checkpointPacked = i == 0 ? lengthSlotPacked : checkpoints[i];
+        uint256 checkpointPacked = i == 0 ? lengthSlotPacked : _erc20VotesCheckpoints[base | i];
         checkpointClock = uint48(checkpointPacked);
-        checkpointValue = _erc20VotesCheckpointValue(checkpoints, i, checkpointPacked);
+        checkpointValue = _erc20VotesCheckpointValue(base | i, checkpointPacked);
     }
 
     /// @dev Returns the latest amount of total voting units.
     function getVotesTotalSupply() public view virtual returns (uint256) {
-        return _checkpointLatest(_erc20VotesCheckpoints[_ERC20_VOTES_TOTAL]);
+        return _checkpointLatest(_ERC20_VOTES_TOTAL);
     }
 
     /// @dev Returns the latest amount of total voting units before or during `timepoint`.
     function getPastVotesTotalSupply(uint256 timepoint) public view virtual returns (uint256) {
         if (timepoint >= clock()) _revertERC5805FutureLookup();
-        return _checkpointUpperLookupRecent(_erc20VotesCheckpoints[_ERC20_VOTES_TOTAL], timepoint);
+        return _checkpointUpperLookupRecent(_ERC20_VOTES_TOTAL, timepoint);
     }
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
@@ -218,10 +220,10 @@ abstract contract ERC20Votes is ERC20 {
     /// @dev Used in `_afterTokenTransfer(address from, address to, uint256 amount)`.
     function _transferVotingUnits(address from, address to, uint256 amount) internal virtual {
         if (from == address(0)) {
-            _checkpointPushDiff(_erc20VotesCheckpoints[_ERC20_VOTES_TOTAL], clock(), amount, true);
+            _checkpointPushDiff(_ERC20_VOTES_TOTAL, clock(), amount, true);
         }
         if (to == address(0)) {
-            _checkpointPushDiff(_erc20VotesCheckpoints[_ERC20_VOTES_TOTAL], clock(), amount, false);
+            _checkpointPushDiff(_ERC20_VOTES_TOTAL, clock(), amount, false);
         }
         _moveDelegateVotes(delegates(from), delegates(to), amount);
     }
@@ -234,13 +236,13 @@ abstract contract ERC20Votes is ERC20 {
         if (fromCleaned == toCleaned) return;
         if (fromCleaned != 0) {
             (uint256 oldValue, uint256 newValue) =
-                _checkpointPushDiff(_erc20VotesCheckpoints[uint160(from)], clock(), amount, false);
+                _checkpointPushDiff(uint256(uint160(from)) << 48, clock(), amount, false);
             // Emit the {DelegateVotesChanged} event.
             emit DelegateVotesChanged(from, oldValue, newValue);
         }
         if (toCleaned != 0) {
             (uint256 oldValue, uint256 newValue) =
-                _checkpointPushDiff(_erc20VotesCheckpoints[uint160(to)], clock(), amount, true);
+                _checkpointPushDiff(uint256(uint160(to)) << 48, clock(), amount, true);
             // Emit the {DelegateVotesChanged} event.
             emit DelegateVotesChanged(to, oldValue, newValue);
         }
@@ -261,23 +263,21 @@ abstract contract ERC20Votes is ERC20 {
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
 
     /// @dev Pushes a checkpoint.
-    function _checkpointPushDiff(
-        mapping(uint256 => uint256) storage checkpoints,
-        uint256 key,
-        uint256 amount,
-        bool isAdd
-    ) private returns (uint256 oldValue, uint256 newValue) {
-        uint256 lengthSlotPacked = checkpoints[0];
+    function _checkpointPushDiff(uint256 base, uint256 key, uint256 amount, bool isAdd)
+        private
+        returns (uint256 oldValue, uint256 newValue)
+    {
+        uint256 lengthSlotPacked = _erc20VotesCheckpoints[base];
         uint256 n = uint48(lengthSlotPacked >> 48);
         if (n == 0) {
             if (!isAdd && amount != 0) revert ERC5805CheckpointValueUnderflow();
             newValue = amount;
-            _erc20VotesStoreCheckpoint(checkpoints, 0, key | 1 << 48, newValue);
+            _erc20VotesStoreCheckpoint(base, key | 1 << 48, newValue);
             return (oldValue, newValue);
         }
         uint256 index = n - 1;
-        uint256 lastPacked = index == 0 ? lengthSlotPacked : checkpoints[index];
-        oldValue = _erc20VotesCheckpointValue(checkpoints, index, lastPacked);
+        uint256 lastPacked = index == 0 ? lengthSlotPacked : _erc20VotesCheckpoints[base | index];
+        oldValue = _erc20VotesCheckpointValue(base | index, lastPacked);
         if (!isAdd) {
             if (amount > oldValue) revert ERC5805CheckpointValueUnderflow();
             newValue = oldValue - amount;
@@ -289,35 +289,33 @@ abstract contract ERC20Votes is ERC20 {
         if (lastKey != key) {
             n = n + 1;
             ++index;
-            checkpoints[0] = lengthSlotPacked + (1 << 48);
+            _erc20VotesCheckpoints[base] = lengthSlotPacked + (1 << 48);
         }
         // Revert with no data, as the assembly's `invalid()`, if the key goes back or the
         // length overflows.
         if (lastKey > key || n >> 48 != 0) revert();
-        _erc20VotesStoreCheckpoint(checkpoints, index, key | n << 48, newValue);
+        _erc20VotesStoreCheckpoint(base | index, key | n << 48, newValue);
     }
 
     /// @dev Returns the latest value in the checkpoints.
-    function _checkpointLatest(mapping(uint256 => uint256) storage checkpoints)
-        private
-        view
-        returns (uint256 result)
-    {
-        uint256 first = checkpoints[0];
+    function _checkpointLatest(uint256 base) private view returns (uint256 result) {
+        uint256 first = _erc20VotesCheckpoints[base];
         uint256 n = uint48(first >> 48);
         if (n != 0) {
+            uint256 index = base | (n - 1);
             result =
-                _erc20VotesCheckpointValue(checkpoints, n - 1, n == 1 ? first : checkpoints[n - 1]);
+                _erc20VotesCheckpointValue(index, n == 1 ? first : _erc20VotesCheckpoints[index]);
         }
     }
 
     /// @dev Returns checkpoint value with the largest key that is less than or equal to `key`.
-    function _checkpointUpperLookupRecent(
-        mapping(uint256 => uint256) storage checkpoints,
-        uint256 key
-    ) private view returns (uint256 result) {
+    function _checkpointUpperLookupRecent(uint256 base, uint256 key)
+        private
+        view
+        returns (uint256 result)
+    {
         uint256 l; // Low.
-        uint256 h = uint48(checkpoints[0] >> 48); // High.
+        uint256 h = uint48(_erc20VotesCheckpoints[base] >> 48); // High.
         // Start the binary search nearer to the right to optimize for recent checkpoints.
         if (h >= 6) {
             // The assembly's first guess: `16 << 4k` for the `k` from 0 to 3 that suits `h`.
@@ -328,17 +326,18 @@ abstract contract ERC20Votes is ERC20 {
             m = (m + h / m) >> 1;
             m = (m + h / m) >> 1;
             m = h - ((m + h / m) >> 1); // Approx `h - sqrt(h)`.
-            if (key >= uint48(checkpoints[m])) l = m + 1;
+            if (key >= uint48(_erc20VotesCheckpoints[base | m])) l = m + 1;
             else h = m;
         }
         // Binary search.
         while (l < h) {
             uint256 m = (l + h) >> 1; // Won't overflow in practice.
-            if (key >= uint48(checkpoints[m])) l = m + 1;
+            if (key >= uint48(_erc20VotesCheckpoints[base | m])) l = m + 1;
             else h = m;
         }
         if (h != 0) {
-            result = _erc20VotesCheckpointValue(checkpoints, h - 1, checkpoints[h - 1]);
+            uint256 index = base | (h - 1);
+            result = _erc20VotesCheckpointValue(index, _erc20VotesCheckpoints[index]);
         }
     }
 
@@ -370,29 +369,26 @@ abstract contract ERC20Votes is ERC20 {
     /// 160 bits, unless they are this contract's address, which stands for the value kept
     /// whole at the complemented index.
     /// @custom:solar-inline
-    function _erc20VotesCheckpointValue(
-        mapping(uint256 => uint256) storage checkpoints,
-        uint256 index,
-        uint256 packed
-    ) private view returns (uint256 value) {
+    function _erc20VotesCheckpointValue(uint256 index, uint256 packed)
+        private
+        view
+        returns (uint256 value)
+    {
         value = packed >> 96;
-        if (value == uint160(address(this))) value = checkpoints[~index];
+        if (value == uint160(address(this))) value = _erc20VotesCheckpoints[~index];
     }
 
     /// @dev Stores the checkpoint `keyAndLength` with `value` at `index`: the value in
     /// the top 160 bits if it fits there and is not this contract's address, else the address
     /// there and the value at the complemented index.
-    function _erc20VotesStoreCheckpoint(
-        mapping(uint256 => uint256) storage checkpoints,
-        uint256 index,
-        uint256 keyAndLength,
-        uint256 value
-    ) private {
+    function _erc20VotesStoreCheckpoint(uint256 index, uint256 keyAndLength, uint256 value)
+        private
+    {
         if (value == uint160(address(this)) || value >> 160 != 0) {
-            checkpoints[index] = keyAndLength | uint256(uint160(address(this))) << 96;
-            checkpoints[~index] = value;
+            _erc20VotesCheckpoints[index] = keyAndLength | uint256(uint160(address(this))) << 96;
+            _erc20VotesCheckpoints[~index] = value;
         } else {
-            checkpoints[index] = keyAndLength | value << 96;
+            _erc20VotesCheckpoints[index] = keyAndLength | value << 96;
         }
     }
 }
