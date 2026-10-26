@@ -12,6 +12,7 @@ from pathlib import Path
 from unittest import mock
 
 import benchmark
+import port_audit
 import upstream_tests
 
 
@@ -47,6 +48,22 @@ class ComparisonTests(unittest.TestCase):
 
 
 class SafetyAuditTests(unittest.TestCase):
+    def test_inventory_counts_trusted_assembly_and_dependencies(self):
+        sources = {
+            "src/Clean.sol": {"ast": {"nodeType": "UncheckedBlock"}},
+            "src/Dependency.sol": {
+                "ast": {
+                    "nodeType": "ContractDefinition",
+                    "documentation": "@custom:solar-trusted",
+                    "nodes": [{"nodeType": "InlineAssembly"}, {"nodeType": "InlineAssembly"}],
+                }
+            },
+        }
+        self.assertEqual(
+            port_audit.assembly_counts(sources),
+            {"src/Clean.sol": 0, "src/Dependency.sol": 2},
+        )
+
     def test_nested_unsafe_blocks_in_dependencies_are_rejected(self):
         output = {
             "sources": {

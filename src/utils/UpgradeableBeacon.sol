@@ -22,12 +22,10 @@ pragma solidity ^0.8.4;
 /// at the time of writing. For best gas efficiency, deploy the Yul version.
 /// The Solidity version is provided as an interface / reference.
 ///
-/// The checked port keeps the implementation and the owner in upstream's slots. Solidity
-/// cannot name those slots, so two trusted helpers read and write them; the checks, reverts
-/// and events are plain Solidity. The owner check compares the caller with the whole stored
-/// word, as upstream does, and {OwnershipTransferred} logs the previous word as an address,
-/// which it is, as only `_setOwner` writes it. Private functions carry the contract's name, so
-/// that the contract combines with other mixins.
+/// This assembly-free port uses Solidity-managed storage for the implementation and owner.
+/// It is intended for new deployments; its layout differs from the Yul version above.
+/// The original slot constants are retained for source compatibility, but are not used.
+/// Authorization, code checks, and event order are unchanged.
 /// @custom:solar-safe memory arithmetic
 contract UpgradeableBeacon {
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
@@ -76,6 +74,10 @@ contract UpgradeableBeacon {
     /// `uint72(bytes9(keccak256("_UPGRADEABLE_BEACON_OWNER_SLOT")))`.
     uint256 internal constant _UPGRADEABLE_BEACON_OWNER_SLOT = 0x4343a0dc92ed22dbfc;
 
+    // Full words avoid read-modify-write sequences for address-sized stores.
+    uint256 private _upgradeableBeaconImplementation;
+    uint256 private _upgradeableBeaconOwner;
+
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                        CONSTRUCTOR                         */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
@@ -112,18 +114,16 @@ contract UpgradeableBeacon {
     function _setImplementation(address newImplementation) internal virtual {
         if (newImplementation.code.length == 0) revert NewImplementationHasNoCode();
         // Store the implementation.
-        _upgradeableBeaconSstore(
-            _UPGRADEABLE_BEACON_IMPLEMENTATION_SLOT, uint256(uint160(newImplementation))
-        );
+        _upgradeableBeaconImplementation = uint160(newImplementation);
         // Emit the {Upgraded} event.
         emit Upgraded(newImplementation);
     }
 
     /// @dev Sets the owner directly without authorization guard.
     function _setOwner(address newOwner) internal virtual {
-        uint256 oldOwner = _upgradeableBeaconSload(_UPGRADEABLE_BEACON_OWNER_SLOT);
+        uint256 oldOwner = _upgradeableBeaconOwner;
         // Store the owner.
-        _upgradeableBeaconSstore(_UPGRADEABLE_BEACON_OWNER_SLOT, uint256(uint160(newOwner)));
+        _upgradeableBeaconOwner = uint160(newOwner);
         // Emit the {OwnershipTransferred} event.
         emit OwnershipTransferred(address(uint160(oldOwner)), newOwner);
     }
@@ -131,12 +131,12 @@ contract UpgradeableBeacon {
     /// @dev Returns the implementation stored in the beacon.
     /// See: https://eips.ethereum.org/EIPS/eip-1967#beacon-contract-address
     function implementation() public view returns (address result) {
-        result = address(uint160(_upgradeableBeaconSload(_UPGRADEABLE_BEACON_IMPLEMENTATION_SLOT)));
+        result = address(uint160(_upgradeableBeaconImplementation));
     }
 
     /// @dev Returns the owner of the beacon.
     function owner() public view returns (address result) {
-        result = address(uint160(_upgradeableBeaconSload(_UPGRADEABLE_BEACON_OWNER_SLOT)));
+        result = address(uint160(_upgradeableBeaconOwner));
     }
 
     /// @dev Allows the owner to upgrade the implementation.
@@ -157,7 +157,7 @@ contract UpgradeableBeacon {
 
     /// @dev Throws if the sender is not the owner.
     function _checkOwner() internal view virtual {
-        uint256 storedOwner = _upgradeableBeaconSload(_UPGRADEABLE_BEACON_OWNER_SLOT);
+        uint256 storedOwner = _upgradeableBeaconOwner;
         // If the caller is not the stored owner, revert.
         if (uint256(uint160(msg.sender)) != storedOwner) revert Unauthorized();
     }
@@ -170,27 +170,5 @@ contract UpgradeableBeacon {
     modifier onlyOwner() virtual {
         _checkOwner();
         _;
-    }
-
-    /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
-    /*                      PRIVATE HELPERS                       */
-    /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
-
-    /// @dev The word in storage slot `slot`. Solidity cannot name a slot it did not allocate.
-    /// @custom:solar-trusted
-    function _upgradeableBeaconSload(uint256 slot) private view returns (uint256 value) {
-        /// @solidity memory-safe-assembly
-        assembly {
-            value := sload(slot)
-        }
-    }
-
-    /// @dev Stores `value` in storage slot `slot`.
-    /// @custom:solar-trusted
-    function _upgradeableBeaconSstore(uint256 slot, uint256 value) private {
-        /// @solidity memory-safe-assembly
-        assembly {
-            sstore(slot, value)
-        }
     }
 }

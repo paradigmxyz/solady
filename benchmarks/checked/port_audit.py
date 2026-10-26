@@ -303,6 +303,7 @@ def run(args):
         {"language": "Solidity", "sources": dict(sorted(archive.items())), "settings": SETTINGS},
     )["sources"]
     generated = generated_sources(archive) if any("/g/" in path for path in paths) else {}
+    assembly = assembly_counts(port)
 
     failed = 0
     total_functions = 0
@@ -330,7 +331,10 @@ def run(args):
         trusted = trusted_declarations({"sources": {path: port[path]}})
         status = "FAIL" if problems else "OK"
         failed += bool(problems)
-        print(f"{status:4} {path}: {count} functions, {len(trusted)} trusted declarations")
+        print(
+            f"{status:4} {path}: {count} functions, {len(trusted)} trusted declarations,"
+            f" {assembly[path]} assembly blocks"
+        )
         for problem in problems:
             print(f"     {problem}")
         if args.trusted:
@@ -357,8 +361,23 @@ def run(args):
         f"{done} of {len(paths)} sources ported, {total_functions} original functions,"
         f" {len(trusted_declarations({'sources': port}))} trusted declarations in their closure"
     )
+    inspected = [path for path in paths if path in assembly]
+    clean = sum(assembly[path] == 0 for path in inspected)
+    print(f"{clean} of {len(inspected)} inspected sources contain no inline assembly")
+    print(
+        f"{sum(assembly.values())} assembly blocks remain in their import closure"
+        " (including trusted declarations)"
+    )
     print("PASS" if not failed else "FAIL")
     return 1 if failed else 0
+
+
+def assembly_counts(sources):
+    """Count actual assembly, regardless of annotations or the selected audit policy."""
+    return {
+        path: sum(node.get("nodeType") == "InlineAssembly" for node in walk(source["ast"]))
+        for path, source in sources.items()
+    }
 
 
 def main():

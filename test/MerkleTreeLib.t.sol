@@ -214,4 +214,65 @@ contract MerkleTreeLibTest is SoladyTest {
     function multiProofRevertsForEmptyLeafs() public pure {
         (new bytes32[](1)).multiProofForLeaves(new uint256[](0));
     }
+
+    function testMultiProofMatchesQueue(uint256 n, uint256 selected) public {
+        n = 1 + n % 32;
+        selected = (selected & ((uint256(1) << n) - 1)) | 1;
+        bytes32[] memory leaves = new bytes32[](n);
+        uint256 count;
+        for (uint256 i; i < n; ++i) {
+            leaves[i] = keccak256(abi.encode(i));
+            if ((selected >> i) & 1 != 0) ++count;
+        }
+        uint256[] memory indices = new uint256[](count);
+        uint256 pos;
+        for (uint256 i; i < n; ++i) {
+            if ((selected >> i) & 1 != 0) indices[pos++] = i;
+        }
+        bytes32[] memory t = MerkleTreeLib.build(leaves);
+        bytes32 beforeHash = keccak256(abi.encode(t, indices));
+        (bytes32[] memory proof, bool[] memory flags) = t.multiProofForLeaves(indices);
+        (bytes32[] memory expectedProof, bool[] memory expectedFlags) = _referenceProof(t, indices);
+        assertEq(abi.encode(proof, flags), abi.encode(expectedProof, expectedFlags));
+        assertEq(beforeHash, keccak256(abi.encode(t, indices)));
+        assertTrue(MerkleProofLib.verifyMultiProof(proof, t.root(), t.gatherLeaves(indices), flags));
+    }
+
+    // Independent append-only queue, with oversized results copied to exact-sized arrays.
+    function _referenceProof(bytes32[] memory t, uint256[] memory indices)
+        private
+        pure
+        returns (bytes32[] memory proof, bool[] memory flags)
+    {
+        uint256[] memory q = new uint256[](t.length + 1);
+        bool[] memory f = new bool[](t.length);
+        bytes32[] memory p = new bytes32[](t.length);
+        uint256 end = indices.length;
+        for (uint256 i; i < end; ++i) {
+            q[i] = t.length - 1 - indices[i];
+        }
+        uint256 start;
+        uint256 nf;
+        uint256 np;
+        while (q[start] != 0) {
+            uint256 node = q[start++];
+            uint256 sibling = node % 2 == 0 ? node - 1 : node + 1;
+            if (start < end && q[start] == sibling) {
+                f[nf] = true;
+                ++start;
+            } else {
+                p[np++] = t[sibling];
+            }
+            ++nf;
+            q[end++] = (node - 1) / 2;
+        }
+        proof = new bytes32[](np);
+        flags = new bool[](nf);
+        for (uint256 i; i < np; ++i) {
+            proof[i] = p[i];
+        }
+        for (uint256 i; i < nf; ++i) {
+            flags[i] = f[i];
+        }
+    }
 }

@@ -25,6 +25,39 @@ contract ERC20VotesTest is SoladyTest {
         assertEq(erc20Votes.delegates(delegator), delegatee);
     }
 
+    function testCheckpointStorageBoundaries() public {
+        uint256 start = vm.getBlockNumber();
+        uint256[5] memory values = [
+            uint256(uint160(address(erc20Votes))),
+            uint256(type(uint160).max),
+            uint256(1) << 160,
+            type(uint256).max,
+            uint256(7)
+        ];
+        erc20Votes.directDelegate(_ALICE, _BOB);
+        uint256 previous;
+        for (uint256 i; i < values.length; ++i) {
+            vm.roll(start + i);
+            erc20Votes.burn(_ALICE, previous);
+            erc20Votes.mint(_ALICE, values[i]);
+            assertEq(erc20Votes.getVotes(_BOB), values[i]);
+            assertEq(erc20Votes.getVotesTotalSupply(), values[i]);
+            assertEq(erc20Votes.checkpointCount(_BOB), i + 1);
+            _checkCheckpointAt(_BOB, i, start + i, values[i]);
+            previous = values[i];
+        }
+        vm.roll(start + values.length);
+        for (uint256 i; i < values.length; ++i) {
+            assertEq(erc20Votes.getPastVotes(_BOB, start + i), values[i]);
+            assertEq(erc20Votes.getPastVotesTotalSupply(start + i), values[i]);
+        }
+        assertEq(erc20Votes.getVotes(address(0)), 0);
+        assertEq(erc20Votes.checkpointCount(address(0)), 0);
+        assertEq(erc20Votes.checkpointCount(_ALICE), 0);
+        vm.expectRevert(ERC20Votes.ERC5805CheckpointIndexOutOfBounds.selector);
+        erc20Votes.checkpointAt(_BOB, values.length);
+    }
+
     function testMintTransferBurnDelegate() public {
         uint256 initialBlockNumber = vm.getBlockNumber();
         erc20Votes.mint(_ALICE, 1 ether);

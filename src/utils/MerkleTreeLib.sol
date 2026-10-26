@@ -18,10 +18,9 @@ pragma solidity ^0.8.4;
 /// The checked port builds and reads the tree with checked indexing, and hashes each pair as
 /// `keccak256(abi.encode(min, max))`, the words the assembly hashes in scratch space.
 /// `nodeProof` counts a node's depth before it allocates the proof. `multiProofForLeaves`
-/// checks the leaf indices first, then runs the assembly's queue once, in an array with room
-/// for every node it ever holds, filling a proof and flags as long as a tree's internal nodes
-/// allow, which the trusted `_truncate` then shrinks to what the queue wrote; the assembly
-/// runs the queue twice, first to size them, and before it checks the indices. A sibling past
+/// checks the leaf indices first, then records proof steps in consumed queue slots. It
+/// allocates exact-sized results and emits those steps without traversing the tree again.
+/// Single-leaf and whole-tree proofs bypass the queue. A sibling past
 /// the end of `tree`, which only a tree of even length has, reverts with `Panic(0x32)` where
 /// the assembly reads the word after `tree`.
 /// @custom:solar-safe memory arithmetic
@@ -146,41 +145,35 @@ library MerkleTreeLib {
         if (c == 0) revert MerkleTreeInvalidLeafIndices();
         uint256 n = tree.length;
         uint256 l = n - (n >> 1); // Num leaves.
-        // The assembly's queue never holds more than `c` nodes, so a buffer with room for
-        // every node it ever holds gives the same nodes in the same order: the leaves', then
-        // one parent per step, and a step for each internal node at most.
-        uint256[] memory q = new uint256[](c + (n >> 1));
         uint256 p;
         for (uint256 i; i < c; ++i) {
             uint256 j = leafIndices[i]; // Leaf index.
             if (j >= l) revert MerkleTreeOutOfBoundsAccess();
             if (i != 0 && j <= p) revert MerkleTreeInvalidLeafIndices();
             p = j;
-            q[i] = n - 1 - j;
         }
-        // At most one flag per internal node, and a proof element for each of them but
-        // the `c - 1` whose sibling comes from the queue.
-        flags = new bool[](n >> 1);
-        proof = new bytes32[]((n >> 1) + 1 - c);
-        uint256 flagsLen;
-        uint256 proofLen;
-        uint256 b; // Start index of the queue.
-        uint256 e = c; // End index of the queue.
-        // Each step pushes a parent, so the queue holds a node at each step's start, and
-        // the slot at its end, which a sibling test may read, is still zero.
-        while (true) {
-            uint256 j = q[b]; // Current.
-            if (j == 0) break;
-            ++b;
-            uint256 s = j - 1 + ((j & 1) << 1); // Sibling, which is not zero.
-            bool f = q[b] == s;
-            flags[flagsLen++] = f;
-            if (f) ++b;
-            else proof[proofLen++] = tree[s];
-            q[e++] = (j - 1) >> 1;
+        if (c == 1) {
+            proof = nodeProof(tree, n - 1 - leafIndices[0]);
+            flags = new bool[](proof.length);
+            return (proof, flags);
         }
-        _truncate(flags, flagsLen);
-        _truncate(proof, proofLen);
+        // Every sibling is supplied when all leaves of a complete tree are selected.
+        if (c == l && n & 1 != 0) {
+            proof = new bytes32[](0);
+            flags = new bool[](c - 1);
+            for (uint256 i; i < flags.length; ++i) {
+                flags[i] = true;
+            }
+            return (proof, flags);
+        }
+        uint256[] memory q = new uint256[](c + (n >> 1));
+        for (uint256 i; i < c; ++i) {
+            q[i] = n - 1 - leafIndices[i];
+        }
+        uint256 count = _recordProof(q, c);
+        flags = new bool[](count);
+        proof = new bytes32[](count + 1 - c);
+        _writeProof(tree, q, proof, flags);
     }
 
     /// @dev Returns a copy of leaves, with the length padded to a power of 2.
@@ -223,30 +216,36 @@ library MerkleTreeLib {
         return b < a ? keccak256(abi.encode(b, a)) : keccak256(abi.encode(a, b));
     }
 
-    /// @dev Shrinks `a` to its first `n` elements in place. Solidity cannot spell a
-    /// shorter length for an existing array; the elements past `n` stay in memory the
-    /// array no longer covers.
-    /// @custom:solar-trusted
-    function _truncate(bytes32[] memory a, uint256 n) private pure {
-        if (n > a.length) n = _outOfBounds();
-        /// @solidity memory-safe-assembly
-        assembly {
-            mstore(a, n)
+    /// @dev Each step consumes one or two nodes and appends their parent. The first consumed
+    /// slot records the sibling index and whether the second was consumed, for `_writeProof`.
+    function _recordProof(uint256[] memory q, uint256 end) private pure returns (uint256 count) {
+        uint256 b;
+        while (q[b] != 0) {
+            uint256 j = q[b];
+            uint256 s = j - 1 + ((j & 1) << 1);
+            bool f = b + 1 < end && q[b + 1] == s;
+            q[b] = (s << 1) | (f ? 1 : 0);
+            b += f ? 2 : 1;
+            q[end++] = (j - 1) >> 1;
+            ++count;
         }
     }
 
-    /// @dev Shrinks `a` to its first `n` elements in place, as the `bytes32[]` one does.
-    /// @custom:solar-trusted
-    function _truncate(bool[] memory a, uint256 n) private pure {
-        if (n > a.length) n = _outOfBounds();
-        /// @solidity memory-safe-assembly
-        assembly {
-            mstore(a, n)
+    /// @dev Emits the counted proof in queue order without changing the source tree.
+    function _writeProof(
+        bytes32[] memory tree,
+        uint256[] memory q,
+        bytes32[] memory proof,
+        bool[] memory flags
+    ) private pure {
+        uint256 proofLen;
+        uint256 b;
+        for (uint256 i; i < flags.length; ++i) {
+            uint256 step = q[b];
+            bool f = step & 1 != 0;
+            flags[i] = f;
+            if (!f) proof[proofLen++] = tree[step >> 1];
+            b += f ? 2 : 1;
         }
-    }
-
-    /// @dev Raises the `Panic(0x32)` an out-of-range index raises.
-    function _outOfBounds() private pure returns (uint256) {
-        return new uint256[](0)[0];
     }
 }
