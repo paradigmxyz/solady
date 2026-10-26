@@ -59,6 +59,63 @@ contract LibPRNGTest is SoladyTest {
     LibPRNG.LazyShuffler internal _lazyShuffler0;
     LibPRNG.LazyShuffler internal _lazyShuffler1;
 
+    function testTypedShufflesMatchWords(uint256 state, uint8 length, uint8 draws, bool prefixOnly)
+        public
+    {
+        uint256 n = uint256(length) % 65;
+        uint256[] memory words = new uint256[](n);
+        int256[] memory signed = new int256[](n);
+        address[] memory addresses = new address[](n);
+        for (uint256 i; i < n; ++i) {
+            uint256 value = uint256(keccak256(abi.encode(i)));
+            words[i] = value;
+            signed[i] = int256(value);
+            addresses[i] = address(uint160(value));
+        }
+        int256[] memory signedAlias = signed;
+        address[] memory addressAlias = addresses;
+        LibPRNG.PRNG memory oracle = LibPRNG.PRNG(state);
+        LibPRNG.PRNG memory signedState = LibPRNG.PRNG(state);
+        LibPRNG.PRNG memory addressState = LibPRNG.PRNG(state);
+        if (prefixOnly) {
+            oracle.shuffle(words, draws);
+            signedState.shuffle(signed, draws);
+            addressState.shuffle(addresses, draws);
+        } else {
+            oracle.shuffle(words);
+            signedState.shuffle(signed);
+            addressState.shuffle(addresses);
+        }
+        assertEq(signedState.state, oracle.state);
+        assertEq(addressState.state, oracle.state);
+        for (uint256 i; i < n; ++i) {
+            assertEq(signedAlias[i], int256(words[i]));
+            assertEq(addressAlias[i], address(uint160(words[i])));
+        }
+    }
+
+    function testLazyShufflerMatchesPermutation(uint256 seed, uint8 length) public {
+        uint256 n = uint256(length) % 65 + 1;
+        uint256[] memory permutation = new uint256[](n);
+        for (uint256 i; i < n; ++i) {
+            permutation[i] = i;
+        }
+        _lazyShuffler0.initialize(n);
+        for (uint256 round; round < 2; ++round) {
+            if (round != 0) _lazyShuffler0.restart();
+            for (uint256 i; i < n; ++i) {
+                uint256 randomness = uint256(keccak256(abi.encode(seed, round, i)));
+                uint256 j = uint256(keccak256(abi.encode(randomness, i))) % (n - i) + i;
+                (permutation[i], permutation[j]) = (permutation[j], permutation[i]);
+                assertEq(_lazyShuffler0.next(randomness), permutation[i]);
+                assertEq(_lazyShuffler0.numShuffled(), i + 1);
+            }
+            for (uint256 i; i < n; ++i) {
+                assertEq(_lazyShuffler0.get(i), permutation[i]);
+            }
+        }
+    }
+
     function testPRNGNext() public {
         unchecked {
             // Super unlikely to fail.

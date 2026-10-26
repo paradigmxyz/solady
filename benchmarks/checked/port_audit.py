@@ -145,16 +145,27 @@ def declarations(ast):
     return found
 
 
-def check_api(upstream, port):
+def check_api(upstream, port, *, allowed_structs=()):
     problems = []
     rows = {(r["library"], r["signature"]): r for r in functions(port)}
     expected = functions(upstream)
     for row in expected:
         if rows.get((row["library"], row["signature"])) != row:
             problems.append(f"function differs or is missing: {row['library']}.{row['signature']}")
-    for member in sorted(members(upstream) - members(port)):
+    found = members(port)
+    for member in sorted(members(upstream) - found):
+        if accepted_struct_change(member, found, allowed_structs):
+            continue
         problems.append(f"member differs or is missing: {member}")
     return len(expected), problems
+
+
+def accepted_struct_change(member, found, allowed_structs):
+    if not member.startswith("struct "):
+        return False
+    prefix = member.split("{", 1)[0]
+    name = prefix.removeprefix("struct ").lstrip(".")
+    return name in allowed_structs and any(actual.startswith(prefix + "{") for actual in found)
 
 
 def check_layout(upstream_text, port_text, upstream, port):
@@ -318,7 +329,14 @@ def run(args):
             continue
         upstream_text = archive[path]["content"]
         port_text = disk[path]["content"]
-        count, problems = check_api(upstream[path]["ast"], port[path]["ast"])
+        allowed_structs = [
+            entry.split(":", 1)[1]
+            for entry in args.allow_struct_change
+            if entry.startswith(path + ":")
+        ]
+        count, problems = check_api(
+            upstream[path]["ast"], port[path]["ast"], allowed_structs=allowed_structs
+        )
         total_functions += count
         problems += check_layout(upstream_text, port_text, upstream[path]["ast"], port[path]["ast"])
         problems += check_pragma(upstream_text, port_text, port[path]["ast"])
@@ -337,6 +355,12 @@ def run(args):
         )
         for problem in problems:
             print(f"     {problem}")
+        found_members = members(port[path]["ast"])
+        for member in sorted(members(upstream[path]["ast"]) - found_members):
+            if accepted_struct_change(member, found_members, allowed_structs):
+                prefix = member.split("{", 1)[0]
+                actual = next(m for m in found_members if m.startswith(prefix + "{"))
+                print(f"     ACCEPTED LAYOUT CHANGE: {member} -> {actual}")
         if args.trusted:
             for name in trusted:
                 print(f"     trusted {name.split(':', 1)[1]}")
@@ -396,6 +420,13 @@ def main():
         "--assembly-free",
         action="store_true",
         help="reject all inline assembly, including trusted code, and allow unchecked arithmetic",
+    )
+    parser.add_argument(
+        "--allow-struct-change",
+        action="append",
+        default=[],
+        metavar="SOURCE:STRUCT",
+        help="report a named struct layout change as accepted (e.g. src/Lib.sol:Lib.State)",
     )
     parser.add_argument("source", nargs="*", help="sources to audit (default: the whole archive)")
     sys.exit(run(parser.parse_args()))

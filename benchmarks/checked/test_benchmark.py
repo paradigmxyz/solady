@@ -48,6 +48,24 @@ class ComparisonTests(unittest.TestCase):
 
 
 class SafetyAuditTests(unittest.TestCase):
+    def test_struct_change_requires_explicit_acceptance_and_existing_struct(self):
+        upstream = {
+            "nodes": [{
+                "nodeType": "StructDefinition", "name": "State",
+                "members": [{"typeDescriptions": {"typeString": "uint256"}}],
+            }]
+        }
+        port = copy.deepcopy(upstream)
+        port["nodes"][0]["members"].append(
+            {"typeDescriptions": {"typeString": "mapping(uint256 => uint256)"}}
+        )
+        self.assertEqual(len(port_audit.check_api(upstream, port)[1]), 1)
+        self.assertEqual(port_audit.check_api(upstream, port, allowed_structs=["State"]), (0, []))
+        self.assertEqual(len(port_audit.check_api(upstream, port, allowed_structs=["Other"])[1]), 1)
+        self.assertEqual(
+            len(port_audit.check_api(upstream, {"nodes": []}, allowed_structs=["State"])[1]), 1
+        )
+
     def test_inventory_counts_trusted_assembly_and_dependencies(self):
         sources = {
             "src/Clean.sol": {"ast": {"nodeType": "UncheckedBlock"}},

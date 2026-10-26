@@ -16,9 +16,10 @@ struct PRNG {
 struct LazyShuffler {
     // Bits Layout:
     // - [0..31]    `numShuffled`
-    // - [32..223]  `permutationSlot`
+    // - [32..223]  Reserved.
     // - [224..255] `length`
     uint256 _state;
+    mapping(uint256 => uint256) _buckets;
 }
 
 using LibPRNG for PRNG global;
@@ -31,9 +32,9 @@ using LibPRNG for LazyShuffler global;
 /// @dev The checked port draws the same numbers and makes the same swaps as the
 /// assembly. The normal sample's lane sum multiplies past the word on purpose, so
 /// it goes through the raw `_mul`. A lazy shuffler keeps its packed state in its
-/// struct and its permutation in the slots the assembly derives from the struct's
-/// slot; trusted helpers name that slot and read and write the derived ones, and
-/// the signed and address shuffles go through upstream's trusted array casts. A
+/// struct and its packed permutation in a Solidity mapping. This layout is for
+/// new deployments and differs from upstream. Signed and address arrays are shuffled
+/// directly, preserving their aliases without reference casts or extra arrays. A
 /// shuffle keeps the state in a local and stores it when it ends, where the
 /// assembly stores it after every draw: they differ only for an array that
 /// overlaps the generator's memory. A full shuffle takes both draws of a hash in
@@ -187,12 +188,34 @@ library LibPRNG {
 
     /// @dev Shuffles the array in-place with Fisher-Yates shuffle.
     function shuffle(PRNG memory prng, int256[] memory a) internal pure {
-        shuffle(prng, _toUints(a));
+        uint256 n = a.length;
+        uint256 r = prng.state;
+        while (n > 1) {
+            r = uint256(keccak256(abi.encode(r)));
+            uint256 j = (r >> 128) % n;
+            (a[n - 1], a[j]) = (a[j], a[n - 1]);
+            j = uint128(r) % (n - 1);
+            (a[n - 2], a[j]) = (a[j], a[n - 2]);
+            n -= 2;
+        }
+        if (n == 1) r = uint256(keccak256(abi.encode(r)));
+        prng.state = r;
     }
 
     /// @dev Shuffles the array in-place with Fisher-Yates shuffle.
     function shuffle(PRNG memory prng, address[] memory a) internal pure {
-        shuffle(prng, _toUints(a));
+        uint256 n = a.length;
+        uint256 r = prng.state;
+        while (n > 1) {
+            r = uint256(keccak256(abi.encode(r)));
+            uint256 j = (r >> 128) % n;
+            (a[n - 1], a[j]) = (a[j], a[n - 1]);
+            j = uint128(r) % (n - 1);
+            (a[n - 2], a[j]) = (a[j], a[n - 2]);
+            n -= 2;
+        }
+        if (n == 1) r = uint256(keccak256(abi.encode(r)));
+        prng.state = r;
     }
 
     /// @dev Partially shuffles the array in-place with Fisher-Yates shuffle.
@@ -231,13 +254,51 @@ library LibPRNG {
     /// @dev Partially shuffles the array in-place with Fisher-Yates shuffle.
     /// The first `k` elements will be uniformly sampled without replacement.
     function shuffle(PRNG memory prng, int256[] memory a, uint256 k) internal pure {
-        shuffle(prng, _toUints(a), k);
+        uint256 n = a.length;
+        if (k > n) k = n;
+        if (k == 0) return;
+        uint256 r = prng.state;
+        uint256 b;
+        uint256 m = n;
+        for (uint256 last = n - k + 1; m > last; m -= 2) {
+            r = uint256(keccak256(abi.encode(r)));
+            uint256 j = b + (r >> 128) % m;
+            (a[b], a[j]) = (a[j], a[b]);
+            j = b + 1 + uint128(r) % (m - 1);
+            (a[b + 1], a[j]) = (a[j], a[b + 1]);
+            b += 2;
+        }
+        if (b < k) {
+            r = uint256(keccak256(abi.encode(r)));
+            uint256 j = b + (r >> 128) % m;
+            (a[b], a[j]) = (a[j], a[b]);
+        }
+        prng.state = r;
     }
 
     /// @dev Partially shuffles the array in-place with Fisher-Yates shuffle.
     /// The first `k` elements will be uniformly sampled without replacement.
     function shuffle(PRNG memory prng, address[] memory a, uint256 k) internal pure {
-        shuffle(prng, _toUints(a), k);
+        uint256 n = a.length;
+        if (k > n) k = n;
+        if (k == 0) return;
+        uint256 r = prng.state;
+        uint256 b;
+        uint256 m = n;
+        for (uint256 last = n - k + 1; m > last; m -= 2) {
+            r = uint256(keccak256(abi.encode(r)));
+            uint256 j = b + (r >> 128) % m;
+            (a[b], a[j]) = (a[j], a[b]);
+            j = b + 1 + uint128(r) % (m - 1);
+            (a[b + 1], a[j]) = (a[j], a[b + 1]);
+            b += 2;
+        }
+        if (b < k) {
+            r = uint256(keccak256(abi.encode(r)));
+            uint256 j = b + (r >> 128) % m;
+            (a[b], a[j]) = (a[j], a[b]);
+        }
+        prng.state = r;
     }
 
     /// @dev Shuffles the bytes in-place with Fisher-Yates shuffle.
@@ -274,8 +335,7 @@ library LibPRNG {
     function initialize(LazyShuffler storage $, uint256 n) internal {
         if (n == 0 || n > 0xfffffffe) revert InvalidInitialLazyShufflerLength();
         if ($._state != 0) revert LazyShufflerAlreadyInitialized();
-        uint256 permutationSlot = uint256(keccak256(abi.encode(_slotOf($)))) >> 64;
-        $._state = (n << 224) | (permutationSlot << 32);
+        $._state = n << 224;
     }
 
     /// @dev Increases the length of `$`.
@@ -332,9 +392,9 @@ library LibPRNG {
         uint256 n = state >> 224; // Length of `$`.
         if (index >= n) revert LazyShufflerGetOutOfBounds();
         uint256 w = n > 0xfffe ? 1 : 0; // Whether entries are 32 bits wide.
-        uint256 s = (index >> (4 - w)) + ((state << 32) >> 64); // Bucket slot.
+        uint256 s = index >> (4 - w); // Bucket index.
         uint256 o = (index & (15 >> w)) << (4 + w); // Bucket slot offset (bits).
-        result = (_sload(s) >> o) & (0xffffffff >> ((w ^ 1) << 4));
+        result = ($._buckets[s] >> o) & (0xffffffff >> ((w ^ 1) << 4));
         result = result == 0 ? index : result - 1;
     }
 
@@ -362,14 +422,13 @@ library LibPRNG {
         uint256 oS; // Its offset (bits).
         {
             uint256 w = state >> 224 > 0xfffe ? 1 : 0; // Whether entries are 32 bits wide.
-            uint256 base = (state << 32) >> 64; // The permutation slot.
             m = 0xffffffff >> ((w ^ 1) << 4);
-            sI = (index >> (4 - w)) + base;
+            sI = index >> (4 - w);
             oI = (index & (15 >> w)) << (4 + w);
-            sS = (shuffled >> (4 - w)) + base;
+            sS = shuffled >> (4 - w);
             oS = (shuffled & (15 >> w)) << (4 + w);
         }
-        uint256 vI = _sload(sI);
+        uint256 vI = $._buckets[sI];
         chosen = (vI >> oI) & m;
         chosen = chosen == 0 ? index : chosen - 1;
         // Record the value at `shuffled` at `index`, then `chosen` at `shuffled`, reading and
@@ -379,13 +438,13 @@ library LibPRNG {
             value = value == 0 ? shuffled : value - 1; // The value at `shuffled`.
             vI ^= (((vI >> oI) & m) ^ (index == value ? 0 : value + 1)) << oI;
             vI ^= (((vI >> oS) & m) ^ (shuffled == chosen ? 0 : chosen + 1)) << oS;
-            _sstore(sI, vI);
+            $._buckets[sI] = vI;
         } else {
-            uint256 vS = _sload(sS);
+            uint256 vS = $._buckets[sS];
             uint256 value = (vS >> oS) & m;
-            _sstore(sS, vS ^ ((value ^ (shuffled == chosen ? 0 : chosen + 1)) << oS));
+            $._buckets[sS] = vS ^ ((value ^ (shuffled == chosen ? 0 : chosen + 1)) << oS);
             value = value == 0 ? shuffled : value - 1; // The value at `shuffled`.
-            _sstore(sI, vI ^ ((((vI >> oI) & m) ^ (index == value ? 0 : value + 1)) << oI));
+            $._buckets[sI] = vI ^ ((((vI >> oI) & m) ^ (index == value ? 0 : value + 1)) << oI);
         }
         $._state = state + 1; // Increment the `numShuffled` by 1, and store it.
     }
@@ -393,27 +452,6 @@ library LibPRNG {
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                      PRIVATE HELPERS                       */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
-
-    /// @dev Reinterpret cast to an uint256 array.
-    /// @custom:solar-trusted
-    function _toUints(int256[] memory a) private pure returns (uint256[] memory casted) {
-        /// @solidity memory-safe-assembly
-        assembly {
-            casted := a
-        }
-    }
-
-    /// @dev Reinterpret cast to an uint256 array.
-    /// @custom:solar-trusted
-    function _toUints(address[] memory a) private pure returns (uint256[] memory casted) {
-        /// @solidity memory-safe-assembly
-        assembly {
-            // As any address written to memory will have the upper 96 bits
-            // of the word zeroized (as per Solidity spec), we can directly
-            // compare these addresses as if they are whole uint256 words.
-            casted := a
-        }
-    }
 
     /// @dev The sum of the four 64-bit lanes of `x`, which the multiplication gathers in its
     /// top lane: the bits it carries past the word are dropped, as the assembly drops them.
@@ -426,33 +464,6 @@ library LibPRNG {
     function _mul(uint256 a, uint256 b) private pure returns (uint256 c) {
         unchecked {
             c = a * b;
-        }
-    }
-
-    /// @dev The storage slot of `$`, which Solidity spells only in assembly.
-    /// @custom:solar-trusted
-    function _slotOf(LazyShuffler storage $) private pure returns (uint256 slot) {
-        /// @solidity memory-safe-assembly
-        assembly {
-            slot := $.slot
-        }
-    }
-
-    /// @dev The word in storage slot `slot`. Solidity cannot name a slot it did not allocate.
-    /// @custom:solar-trusted
-    function _sload(uint256 slot) private view returns (uint256 value) {
-        /// @solidity memory-safe-assembly
-        assembly {
-            value := sload(slot)
-        }
-    }
-
-    /// @dev Stores `value` in storage slot `slot`.
-    /// @custom:solar-trusted
-    function _sstore(uint256 slot, uint256 value) private {
-        /// @solidity memory-safe-assembly
-        assembly {
-            sstore(slot, value)
         }
     }
 }
