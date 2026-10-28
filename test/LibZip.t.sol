@@ -540,4 +540,156 @@ contract LibZipTest is SoladyTest {
         }
         assertEq(computed, expected);
     }
+
+    function testFlzCompressHashTableWidth255() public {
+        _testFlzCompressHashTableWidth(255);
+    }
+
+    function testFlzCompressHashTableWidth256() public {
+        _testFlzCompressHashTableWidth(256);
+    }
+
+    function testFlzCompressHashTableWidth257() public {
+        _testFlzCompressHashTableWidth(257);
+    }
+
+    function testFlzCompressHashTableWidth65535() public {
+        _testFlzCompressHashTableWidth(65535);
+    }
+
+    function testFlzCompressHashTableWidth65536() public {
+        _testFlzCompressHashTableWidth(65536);
+    }
+
+    function testFlzCompressHashTableWidth65537() public {
+        _testFlzCompressHashTableWidth(65537);
+    }
+
+    function _testFlzCompressHashTableWidth(uint256 n) private {
+        bytes memory data = _flzHashTableWidthData(n, false);
+        bytes32 dataHash = keccak256(data);
+        bytes memory expected = _flzCompressOriginal(data);
+        bytes memory compressed = LibZip.flzCompress(data);
+        bytes32 compressedHash = keccak256(compressed);
+        assertEq(compressed, expected);
+
+        bytes memory repeated = _flzHashTableWidthData(n, true);
+        bytes32 repeatedHash = keccak256(repeated);
+        bytes memory compressedRepeated = LibZip.flzCompress(repeated);
+        assertEq(compressedRepeated, _flzCompressOriginal(repeated));
+        // Later compressions and allocations must preserve the retained result and both inputs.
+        assertEq(compressed, expected);
+        assertEq(keccak256(compressed), compressedHash);
+        assertEq(keccak256(data), dataHash);
+        assertEq(keccak256(repeated), repeatedHash);
+    }
+
+    function _flzHashTableWidthData(uint256 n, bool repeated)
+        private
+        pure
+        returns (bytes memory data)
+    {
+        data = new bytes(n);
+        uint64 state = 0x9e3779b97f4a7c15;
+        for (uint256 i; i < n; ++i) {
+            if (repeated) {
+                data[i] = bytes1(uint8(i % 23));
+            } else {
+                // Deterministic xorshift64 bytes exercise many hash buckets.
+                state ^= state << 13;
+                state ^= state >> 7;
+                state ^= state << 17;
+                data[i] = bytes1(uint8(state));
+            }
+        }
+    }
+
+    // Upstream Solady's original compressor retains all 8192 buckets with 32-bit offsets.
+    // https://github.com/vectorized/solady/blob/main/src/utils/LibZip.sol
+    function _flzCompressOriginal(bytes memory data) private pure returns (bytes memory result) {
+        /// @solidity memory-safe-assembly
+        assembly {
+            function ms8(d_, v_) -> _d {
+                mstore8(d_, v_)
+                _d := add(d_, 1)
+            }
+            function u24(p_) -> _u {
+                _u := mload(p_)
+                _u := or(shl(16, byte(2, _u)), or(shl(8, byte(1, _u)), byte(0, _u)))
+            }
+            function cmp(p_, q_, e_) -> _l {
+                for { e_ := sub(e_, q_) } lt(_l, e_) { _l := add(_l, 1) } {
+                    e_ := mul(iszero(byte(0, xor(mload(add(p_, _l)), mload(add(q_, _l))))), e_)
+                }
+            }
+            function literals(runs_, src_, dest_) -> _o {
+                for { _o := dest_ } iszero(lt(runs_, 0x20)) { runs_ := sub(runs_, 0x20) } {
+                    mstore(ms8(_o, 31), mload(src_))
+                    _o := add(_o, 0x21)
+                    src_ := add(src_, 0x20)
+                }
+                if iszero(runs_) { leave }
+                mstore(ms8(_o, sub(runs_, 1)), mload(src_))
+                _o := add(1, add(_o, runs_))
+            }
+            function mt(l_, d_, o_) -> _o {
+                for { d_ := sub(d_, 1) } iszero(lt(l_, 263)) { l_ := sub(l_, 262) } {
+                    o_ := ms8(ms8(ms8(o_, add(224, shr(8, d_))), 253), and(0xff, d_))
+                }
+                if iszero(lt(l_, 7)) {
+                    _o := ms8(ms8(ms8(o_, add(224, shr(8, d_))), sub(l_, 7)), and(0xff, d_))
+                    leave
+                }
+                _o := ms8(ms8(o_, add(shl(5, l_), shr(8, d_))), and(0xff, d_))
+            }
+            function setHash(i_, v_) {
+                let p_ := add(mload(0x40), shl(2, i_))
+                mstore(p_, xor(mload(p_), shl(224, xor(shr(224, mload(p_)), v_))))
+            }
+            function getHash(i_) -> _h {
+                _h := shr(224, mload(add(mload(0x40), shl(2, i_))))
+            }
+            function hash(v_) -> _r {
+                _r := and(shr(19, mul(2654435769, v_)), 0x1fff)
+            }
+            function setNextHash(ip_, ipStart_) -> _ip {
+                setHash(hash(u24(ip_)), sub(ip_, ipStart_))
+                _ip := add(ip_, 1)
+            }
+            result := mload(0x40)
+            calldatacopy(result, calldatasize(), 0x8000) // Zeroize the hashmap.
+            let op := add(result, 0x8000)
+            let a := add(data, 0x20)
+            let ipStart := a
+            let ipLimit := sub(add(ipStart, mload(data)), 13)
+            for { let ip := add(2, a) } lt(ip, ipLimit) {} {
+                let r := 0
+                let d := 0
+                for {} 1 {} {
+                    let s := u24(ip)
+                    let h := hash(s)
+                    r := add(ipStart, getHash(h))
+                    setHash(h, sub(ip, ipStart))
+                    d := sub(ip, r)
+                    if iszero(lt(ip, ipLimit)) { break }
+                    ip := add(ip, 1)
+                    if iszero(gt(d, 0x1fff)) { if eq(s, u24(r)) { break } }
+                }
+                if iszero(lt(ip, ipLimit)) { break }
+                ip := sub(ip, 1)
+                if gt(ip, a) { op := literals(sub(ip, a), a, op) }
+                let l := cmp(add(r, 3), add(ip, 3), add(ipLimit, 9))
+                op := mt(l, d, op)
+                ip := setNextHash(setNextHash(add(ip, l), ipStart), ipStart)
+                a := ip
+            }
+            // Copy the result to compact the memory, overwriting the hashmap.
+            let end := sub(literals(sub(add(ipStart, mload(data)), a), a, op), 0x7fe0)
+            let o := add(result, 0x20)
+            mstore(result, sub(end, o)) // Store the length.
+            for {} iszero(gt(o, end)) { o := add(o, 0x20) } { mstore(o, mload(add(o, 0x7fe0))) }
+            mstore(end, 0) // Zeroize the slot after the string.
+            mstore(0x40, add(end, 0x20)) // Allocate the memory.
+        }
+    }
 }

@@ -15,12 +15,13 @@ pragma solidity ^0.8.4;
 /// near its end in bounds, and writes whole words into an output buffer with room to spare, the
 /// bytes of a word past its step replaced by the next step's word; the trusted `_truncate` then
 /// sets the output's length. `cdCompress` and `cdFallback` keep the copy in the output's buffer,
-/// after the room for the output. FastLZ keeps upstream's hash table, 8192 offsets of 32 bits, in
-/// 1024 words, measures matches a word at a time, and copies a repeat shorter than a match as a
-/// word of whole repeats. The decompressors grow their output as it fills. `cdDecompress` reads the
-/// byte after its input with the trusted `_byteAfter`, as upstream reads it for the length of a run
-/// whose `0x00` ends the input, and `cdFallback` ends the call with the trusted `_return` and
-/// `_returnCall`. Deliberate differences, on input the compressors never write: a `0xff` run longer
+/// after the room for the output. FastLZ keeps upstream's 8192-entry hash table, packing each
+/// offset into 8, 16, or 32 bits according to the input length, measures matches a word at a time,
+/// and copies a repeat shorter than a match as a word of whole repeats. The decompressors grow
+/// their output as it fills. `cdDecompress` reads the byte after its input with the trusted
+/// `_byteAfter`, as upstream reads it for the length of a run whose `0x00` ends the input, and
+/// `cdFallback` ends the call with the trusted `_return` and `_returnCall`. Deliberate differences,
+/// on input the compressors never write: a `0xff` run longer
 /// than 32 bytes goes on with zeros where upstream leaves the memory there as it was, and
 /// `flzDecompress` reads zeros past the end of its input where upstream reads the memory after it,
 /// and reverts with `Panic(0x11)` for a match that starts before its output, where upstream reads
@@ -45,18 +46,20 @@ library LibZip {
         // The output offset, and the offset of the first input byte not yet written.
         uint256 op;
         uint256 a;
-        /// @custom:solar-scratch
         {
             // `data`, and a zero word after it, which the reads near its end reach.
             bytes memory x = bytes.concat(data, bytes32(0));
-            // The hash table: 8192 offsets of 32 bits, eight to a word.
-            uint256[1024] memory htab;
             if (n > 15) {
+                // Every recorded offset is below n. Keep all 8192 buckets, using only the
+                // bits needed for this input; large inputs retain upstream's 32-bit offsets.
+                // The low byte holds log2(entry bits), and the upper bytes hold their mask.
+                uint256 format = n <= 0x100 ? 0xff03 : n <= 0x10000 ? 0xffff04 : 0xffffffff05;
+                uint256[] memory htab = new uint256[](uint256(32) << (format & 7));
                 uint256 ipLimit = n - 13;
                 for (uint256 ip = 2; ip < ipLimit;) {
                     uint256 r;
                     uint256 l;
-                    (ip, r, l) = _find(x, htab, ip, ipLimit);
+                    (ip, r, l) = _find(x, htab, ip, ipLimit, format);
                     if (ip >= ipLimit) break;
                     --ip;
                     if (ip > a) op = _literals(result, op, x, a, ip - a);
@@ -64,8 +67,8 @@ library LibZip {
                     // Hash the two offsets after the match, from one word.
                     ip += l;
                     uint256 w = uint256(_readBytes32(x, ip));
-                    _swapHash(htab, _hash(w >> 232), ip);
-                    _swapHash(htab, _hash((w >> 224) & 0xffffff), ip + 1);
+                    _swapHash(htab, _hash(w >> 232), ip, format);
+                    _swapHash(htab, _hash((w >> 224) & 0xffffff), ip + 1, format);
                     a = ip += 2;
                 }
             }
@@ -329,14 +332,16 @@ library LibZip {
     /// last bytes that hashed alike within 8192 bytes back, or `ipLimit` is hashed. Returns the
     /// offset after the match's first byte, or `ipLimit`; the offset of the bytes it matches;
     /// and the match's length field, which `_cmp` counts up to `ipLimit + 9`.
-    function _find(bytes memory x, uint256[1024] memory htab, uint256 ip, uint256 ipLimit)
-        private
-        pure
-        returns (uint256, uint256 r, uint256 l)
-    {
+    function _find(
+        bytes memory x,
+        uint256[] memory htab,
+        uint256 ip,
+        uint256 ipLimit,
+        uint256 format
+    ) private pure returns (uint256, uint256 r, uint256 l) {
         while (true) {
             uint256 w = uint256(_readBytes32(x, ip));
-            r = _swapHash(htab, _hash(w >> 232), ip);
+            r = _swapHash(htab, _hash(w >> 232), ip, format);
             if (ip >= ipLimit) return (ip, r, 0);
             ++ip;
             if (ip <= r + 0x2000) {
@@ -360,16 +365,18 @@ library LibZip {
 
     /// @dev Stores the offset `v` for the hash `h` in `htab` and returns the offset it held.
     /// @custom:solar-inline
-    function _swapHash(uint256[1024] memory htab, uint256 h, uint256 v)
+    function _swapHash(uint256[] memory htab, uint256 h, uint256 v, uint256 format)
         private
         pure
         returns (uint256 r)
     {
-        uint256 i = h >> 3;
-        uint256 shift = (h & 7) << 5;
+        uint256 position = h << (format & 7);
+        uint256 offsetMask = format >> 8;
+        uint256 i = position >> 8;
+        uint256 shift = position & 255;
         uint256 w = htab[i];
-        r = (w >> shift) & 0xffffffff;
-        htab[i] = w ^ (((r ^ v) & 0xffffffff) << shift);
+        r = (w >> shift) & offsetMask;
+        htab[i] = w ^ (((r ^ v) & offsetMask) << shift);
     }
 
     /// @dev The length of the match at `q` with the bytes at `p`, up to `e`, counted as
@@ -397,7 +404,6 @@ library LibZip {
     /// at most 32 bytes, each after a control byte holding its length minus one, and returns
     /// the offset after them. Each run is written with the rest of its word, which later
     /// writes replace.
-    /// @custom:solar-inline
     function _literals(bytes memory out, uint256 op, bytes memory x, uint256 start, uint256 count)
         private
         pure

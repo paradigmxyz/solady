@@ -123,7 +123,6 @@ library WebAuthn {
         result =
             result && authenticatorData.length > 0x20 && (uint8(authenticatorData[0x20]) & u) == u;
         if (result) {
-            /// @custom:solar-scratch
             {
                 // 19. Compute `sha256(clientDataJSON)`.
                 // 20. Compute `sha256(authenticatorData ‖ sha256(clientDataJSON))`.

@@ -636,17 +636,15 @@ library LibSort {
     function _hasDuplicate(uint256[] memory a) private pure returns (bool) {
         uint256 n = a.length;
         if (n < 2) return false;
-        /// @custom:solar-scratch
         {
-            uint256 capacity = 1;
-            while (capacity < n * 2) capacity *= 2;
+            // Modulo keeps the temporary table at exactly twice the input length.
+            uint256 capacity = n * 2;
             uint256[] memory seen = new uint256[](capacity);
-            uint256 mask = capacity - 1;
             for (uint256 i; i < a.length; ++i) {
                 uint256 x = a[i];
                 uint256 r = mulmod(x, 0x100000000000000000000000000000051, ~uint256(0xbc));
                 while (true) {
-                    uint256 slot = r & mask;
+                    uint256 slot = r % capacity;
                     uint256 s = seen[slot];
                     if (s == 0) {
                         seen[slot] = i + 1;
@@ -974,17 +972,15 @@ library LibSort {
     function _hasDuplicate(int256[] memory a) private pure returns (bool) {
         uint256 n = a.length;
         if (n < 2) return false;
-        /// @custom:solar-scratch
         {
-            uint256 capacity = 1;
-            while (capacity < n * 2) capacity *= 2;
+            // Modulo keeps the temporary table at exactly twice the input length.
+            uint256 capacity = n * 2;
             uint256[] memory seen = new uint256[](capacity);
-            uint256 mask = capacity - 1;
             for (uint256 i; i < a.length; ++i) {
                 int256 x = a[i];
                 uint256 r = mulmod(uint256(x), 0x100000000000000000000000000000051, ~uint256(0xbc));
                 while (true) {
-                    uint256 slot = r & mask;
+                    uint256 slot = r % capacity;
                     uint256 s = seen[slot];
                     if (s == 0) {
                         seen[slot] = i + 1;
@@ -1597,17 +1593,15 @@ library LibSort {
     function _hasDuplicate(bytes32[] memory a) private pure returns (bool) {
         uint256 n = a.length;
         if (n < 2) return false;
-        /// @custom:solar-scratch
         {
-            uint256 capacity = 1;
-            while (capacity < n * 2) capacity *= 2;
+            // Modulo keeps the temporary table at exactly twice the input length.
+            uint256 capacity = n * 2;
             uint256[] memory seen = new uint256[](capacity);
-            uint256 mask = capacity - 1;
             for (uint256 i; i < a.length; ++i) {
                 bytes32 x = a[i];
                 uint256 r = mulmod(uint256(x), 0x100000000000000000000000000000051, ~uint256(0xbc));
                 while (true) {
-                    uint256 slot = r & mask;
+                    uint256 slot = r % capacity;
                     uint256 s = seen[slot];
                     if (s == 0) {
                         seen[slot] = i + 1;

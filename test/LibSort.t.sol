@@ -1365,17 +1365,18 @@ contract LibSortTest is SoladyTest {
         }
         LibSort.groupSum(keys, values);
         int256[] memory expectedKeys = new int256[](5);
-        expectedKeys[0] = -10;
-        expectedKeys[1] = -1;
-        expectedKeys[2] = 0;
-        expectedKeys[3] = 3;
-        expectedKeys[4] = 7;
+        // Pinned Solady 0.1.26 groups signed keys in unsigned word order.
+        expectedKeys[0] = 0;
+        expectedKeys[1] = 3;
+        expectedKeys[2] = 7;
+        expectedKeys[3] = -10;
+        expectedKeys[4] = -1;
         uint256[] memory expectedValues = new uint256[](5);
-        expectedValues[0] = 4;
-        expectedValues[1] = 2;
-        expectedValues[2] = 5;
-        expectedValues[3] = 3;
-        expectedValues[4] = 1;
+        expectedValues[0] = 5;
+        expectedValues[1] = 3;
+        expectedValues[2] = 1;
+        expectedValues[3] = 4;
+        expectedValues[4] = 2;
         assertEq(keys, expectedKeys);
         assertEq(values, expectedValues);
     }
@@ -1395,13 +1396,21 @@ contract LibSortTest is SoladyTest {
             }
         }
         uint256 oriSum = _sum(values);
-        int256[] memory uniqueKeys = LibSort.copy(keys);
-        LibSort.insertionSort(uniqueKeys);
-        LibSort.uniquifySorted(uniqueKeys);
+        // Pinned Solady 0.1.26 reinterprets signed group keys as unsigned words.
+        uint256[] memory wordKeys = new uint256[](n);
+        for (uint256 i; i < n; ++i) {
+            wordKeys[i] = uint256(keys[i]);
+        }
+        LibSort.insertionSort(wordKeys);
+        LibSort.uniquifySorted(wordKeys);
+        int256[] memory uniqueKeys = new int256[](wordKeys.length);
+        for (uint256 i; i < wordKeys.length; ++i) {
+            uniqueKeys[i] = int256(wordKeys[i]);
+        }
         uint256[] memory sums = new uint256[](uniqueKeys.length);
         unchecked {
             for (uint256 i; i < n; ++i) {
-                (, uint256 j) = LibSort.searchSorted(uniqueKeys, keys[i]);
+                (, uint256 j) = LibSort.searchSorted(wordKeys, uint256(keys[i]));
                 sums[j] += values[i];
             }
         }
@@ -1410,7 +1419,9 @@ contract LibSortTest is SoladyTest {
         assertEq(keys, uniqueKeys);
         assertEq(values, sums);
         assertEq(_sum(sums), oriSum);
-        assertTrue(LibSort.isSortedAndUniquified(keys));
+        for (uint256 i = 1; i < keys.length; ++i) {
+            assertLt(uint256(keys[i - 1]), uint256(keys[i]));
+        }
     }
 
     function _sum(uint256[] memory a) internal pure returns (uint256 result) {
@@ -1488,6 +1499,36 @@ contract LibSortTest is SoladyTest {
         LibSort.sort(b);
         LibSort.uniquifySorted(b);
         return b.length != a.length;
+    }
+
+    function testHasDuplicateRetainsInputAcrossCalls() public {
+        uint256[] memory a = new uint256[](33);
+        for (uint256 i; i < a.length; ++i) {
+            a[i] = i;
+        }
+        bytes32 original = keccak256(abi.encode(a));
+        for (uint256 i; i < 3; ++i) {
+            assertFalse(LibSort.hasDuplicate(a));
+            assertEq(keccak256(abi.encode(a)), original);
+        }
+        a[a.length - 1] = a[0];
+        original = keccak256(abi.encode(a));
+        for (uint256 i; i < 3; ++i) {
+            assertTrue(LibSort.hasDuplicate(a));
+            assertEq(keccak256(abi.encode(a)), original);
+        }
+    }
+
+    function testHasDuplicateModuloCollisions() public {
+        uint256[] memory a = new uint256[](5);
+        // All five words hash to slot nine in the ten-slot table, so probes wrap to zero.
+        for (uint256 i; i < a.length; ++i) {
+            a[i] = 7 + i * 10;
+        }
+        assertFalse(LibSort.hasDuplicate(a));
+        a[a.length - 1] = a[0];
+        assertTrue(LibSort.hasDuplicate(a));
+        assertEq(LibSort.hasDuplicate(a), _hasDuplicateOriginal(a));
     }
 
     function testHasDuplicateHashmapCapacityTrick(uint256 n) public pure {
