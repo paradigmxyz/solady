@@ -342,7 +342,6 @@ abstract contract ERC20Votes is ERC20 {
     }
 
     /// @dev Reverts with `ERC5805FutureLookup()`.
-    /// @custom:solar-terminates
     function _revertERC5805FutureLookup() private pure {
         revert ERC5805FutureLookup();
     }

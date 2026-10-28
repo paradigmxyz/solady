@@ -240,7 +240,6 @@ abstract contract EnumerableRoles {
     }
 
     /// @dev Reverts with `EnumerableRolesUnauthorized()`.
-    /// @custom:solar-terminates
     function _revertEnumerableRolesUnauthorized() private pure {
         revert EnumerableRolesUnauthorized();
     }

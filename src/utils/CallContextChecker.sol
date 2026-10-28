@@ -92,7 +92,6 @@ contract CallContextChecker {
     /*                      PRIVATE HELPERS                       */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
 
-    /// @custom:solar-terminates
     function _revertUnauthorizedCallContext() private pure {
         revert UnauthorizedCallContext();
     }

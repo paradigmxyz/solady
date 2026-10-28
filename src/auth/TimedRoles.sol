@@ -238,7 +238,6 @@ abstract contract TimedRoles {
     }
 
     /// @dev Reverts with `TimedRolesUnauthorized()`.
-    /// @custom:solar-terminates
     function _revertTimedRolesUnauthorized() private pure {
         revert TimedRolesUnauthorized();
     }
