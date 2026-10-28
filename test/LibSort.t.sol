@@ -1521,14 +1521,96 @@ contract LibSortTest is SoladyTest {
 
     function testHasDuplicateModuloCollisions() public {
         uint256[] memory a = new uint256[](5);
-        // All five words hash to slot nine in the ten-slot table, so probes wrap to zero.
+        // All five words start at slot nine in the ten-slot table, so probes wrap to zero.
         for (uint256 i; i < a.length; ++i) {
-            a[i] = 7 + i * 10;
+            a[i] = 9 + i * 10;
         }
         assertFalse(LibSort.hasDuplicate(a));
         a[a.length - 1] = a[0];
         assertTrue(LibSort.hasDuplicate(a));
         assertEq(LibSort.hasDuplicate(a), _hasDuplicateOriginal(a));
+    }
+
+    function testHasDuplicateHighWords() public {
+        uint256[] memory a = new uint256[](64);
+        for (uint256 i; i < a.length; ++i) {
+            a[i] = i << 128;
+        }
+        _assertHasDuplicateWordOverloads(a, false);
+        // This value was placed after the high-word fold, not in its initial bucket.
+        a[a.length - 1] = a[31];
+        _assertHasDuplicateWordOverloads(a, true);
+
+        for (uint256 i; i < a.length; ++i) {
+            a[i] = (uint256(1) << 255) | (i << 128);
+        }
+        _assertHasDuplicateWordOverloads(a, false);
+        a[a.length - 1] = a[31];
+        _assertHasDuplicateWordOverloads(a, true);
+
+        for (uint256 i; i < a.length; ++i) {
+            a[i] = ~(i << 128);
+        }
+        _assertHasDuplicateWordOverloads(a, false);
+        a[a.length - 1] = a[31];
+        _assertHasDuplicateWordOverloads(a, true);
+    }
+
+    function testHasDuplicateWordBoundaries() public {
+        uint256[] memory a = new uint256[](8);
+        a[0] = 0;
+        a[1] = type(uint256).max;
+        a[2] = uint256(1) << 255;
+        a[3] = (uint256(1) << 255) - 1;
+        a[4] = (uint256(1) << 128) - 1;
+        a[5] = uint256(1) << 128;
+        a[6] = (uint256(1) << 160) - 1;
+        a[7] = uint256(1) << 160;
+        _assertHasDuplicateWordOverloads(a, false);
+        a[a.length - 1] = a[0];
+        _assertHasDuplicateWordOverloads(a, true);
+    }
+
+    function _assertHasDuplicateWordOverloads(uint256[] memory a, bool expected) private {
+        int256[] memory signedWords = new int256[](a.length);
+        bytes32[] memory words = new bytes32[](a.length);
+        for (uint256 i; i < a.length; ++i) {
+            signedWords[i] = int256(a[i]);
+            words[i] = bytes32(a[i]);
+        }
+        assertEq(_hasDuplicateOriginal(a), expected);
+        bytes32 original = keccak256(abi.encode(a));
+        for (uint256 i; i < 2; ++i) {
+            assertEq(LibSort.hasDuplicate(a), expected);
+            assertEq(keccak256(abi.encode(a)), original);
+            assertEq(LibSort.hasDuplicate(signedWords), expected);
+            assertEq(keccak256(abi.encode(signedWords)), original);
+            assertEq(LibSort.hasDuplicate(words), expected);
+            assertEq(keccak256(abi.encode(words)), original);
+        }
+    }
+
+    function testHasDuplicateHighAddresses() public {
+        address[] memory a = new address[](64);
+        uint256[] memory words = new uint256[](a.length);
+        for (uint256 i; i < a.length; ++i) {
+            words[i] = i << 128;
+            a[i] = address(uint160(words[i]));
+        }
+        assertFalse(_hasDuplicateOriginal(words));
+        bytes32 original = keccak256(abi.encode(a));
+        for (uint256 i; i < 2; ++i) {
+            assertFalse(LibSort.hasDuplicate(a));
+            assertEq(keccak256(abi.encode(a)), original);
+        }
+        a[a.length - 1] = a[31];
+        words[words.length - 1] = words[31];
+        assertTrue(_hasDuplicateOriginal(words));
+        original = keccak256(abi.encode(a));
+        for (uint256 i; i < 2; ++i) {
+            assertTrue(LibSort.hasDuplicate(a));
+            assertEq(keccak256(abi.encode(a)), original);
+        }
     }
 
     function testHasDuplicateHashmapCapacityTrick(uint256 n) public pure {

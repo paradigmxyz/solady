@@ -633,6 +633,7 @@ library LibSort {
     /// open-addressed table of indices at least twice as long as `a`. The loop
     /// tests its index against the length it reads again, as the table's stores
     /// could reach it, so that one test covers the element's bounds check.
+    /// @custom:solar-inline
     function _hasDuplicate(uint256[] memory a) private pure returns (bool) {
         uint256 n = a.length;
         if (n < 2) return false;
@@ -642,7 +643,7 @@ library LibSort {
             uint256[] memory seen = new uint256[](capacity);
             for (uint256 i; i < a.length; ++i) {
                 uint256 x = a[i];
-                uint256 r = mulmod(x, 0x100000000000000000000000000000051, ~uint256(0xbc));
+                uint256 r = x;
                 while (true) {
                     uint256 slot = r % capacity;
                     uint256 s = seen[slot];
@@ -651,7 +652,9 @@ library LibSort {
                         break;
                     }
                     if (a[s - 1] == x) return true;
-                    r = slot + 1;
+                    // Checked array allocation bounds `capacity` below 2**64 in both compilers.
+                    // The first fold puts `r` below 2**128, so later probes are linear.
+                    r = (slot + 1) ^ (r >> 128);
                 }
             }
         }
@@ -969,6 +972,7 @@ library LibSort {
     /// open-addressed table of indices at least twice as long as `a`. The loop
     /// tests its index against the length it reads again, as the table's stores
     /// could reach it, so that one test covers the element's bounds check.
+    /// @custom:solar-inline
     function _hasDuplicate(int256[] memory a) private pure returns (bool) {
         uint256 n = a.length;
         if (n < 2) return false;
@@ -978,7 +982,8 @@ library LibSort {
             uint256[] memory seen = new uint256[](capacity);
             for (uint256 i; i < a.length; ++i) {
                 int256 x = a[i];
-                uint256 r = mulmod(uint256(x), 0x100000000000000000000000000000051, ~uint256(0xbc));
+                // Make a signed span around zero contiguous before choosing its initial buckets.
+                uint256 r = uint256(x) ^ (uint256(1) << 255);
                 while (true) {
                     uint256 slot = r % capacity;
                     uint256 s = seen[slot];
@@ -987,7 +992,9 @@ library LibSort {
                         break;
                     }
                     if (a[s - 1] == x) return true;
-                    r = slot + 1;
+                    // Checked array allocation bounds `capacity` below 2**64 in both compilers.
+                    // The first fold puts `r` below 2**128, so later probes are linear.
+                    r = (slot + 1) ^ (r >> 128);
                 }
             }
         }
@@ -1590,6 +1597,7 @@ library LibSort {
     /// open-addressed table of indices at least twice as long as `a`. The loop
     /// tests its index against the length it reads again, as the table's stores
     /// could reach it, so that one test covers the element's bounds check.
+    /// @custom:solar-inline
     function _hasDuplicate(bytes32[] memory a) private pure returns (bool) {
         uint256 n = a.length;
         if (n < 2) return false;
@@ -1599,7 +1607,7 @@ library LibSort {
             uint256[] memory seen = new uint256[](capacity);
             for (uint256 i; i < a.length; ++i) {
                 bytes32 x = a[i];
-                uint256 r = mulmod(uint256(x), 0x100000000000000000000000000000051, ~uint256(0xbc));
+                uint256 r = uint256(x);
                 while (true) {
                     uint256 slot = r % capacity;
                     uint256 s = seen[slot];
@@ -1608,7 +1616,9 @@ library LibSort {
                         break;
                     }
                     if (a[s - 1] == x) return true;
-                    r = slot + 1;
+                    // Checked array allocation bounds `capacity` below 2**64 in both compilers.
+                    // The first fold puts `r` below 2**128, so later probes are linear.
+                    r = (slot + 1) ^ (r >> 128);
                 }
             }
         }
