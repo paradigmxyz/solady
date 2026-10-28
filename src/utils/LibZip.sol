@@ -339,11 +339,14 @@ library LibZip {
         uint256 ipLimit,
         uint256 format
     ) private pure returns (uint256, uint256 r, uint256 l) {
+        uint256 first = uint256(_readBytes32(x, 0)) >> 232;
         while (true) {
             uint256 w = uint256(_readBytes32(x, ip));
             r = _swapHash(htab, _hash(w >> 232), ip, format);
             if (ip >= ipLimit) return (ip, r, 0);
             ++ip;
+            // Offset zero can only match the first prefix; skip its word load otherwise.
+            if (r == 0 && w >> 232 != first) continue;
             if (ip <= r + 0x2000) {
                 uint256 diff = w ^ uint256(_readBytes32(x, r));
                 if (diff >> 232 == 0) {

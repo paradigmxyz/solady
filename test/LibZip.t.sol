@@ -565,6 +565,26 @@ contract LibZipTest is SoladyTest {
         _testFlzCompressHashTableWidth(65537);
     }
 
+    function testFlzCompressZeroOffsetCandidates() public {
+        // The prefix at offset 8 matches offset zero, but their fourth bytes differ.
+        _testFlzCompressZeroOffsetCandidate(
+            hex"01020304aabbccdd010203ff112233445566778899aabbccddeeff001122334455"
+        );
+        // `010203` and `0005f9` both hash to bucket 3914. The unequal prefix at offset 8
+        // must replace zero, so offset 16 compares against 8, and offset 24 against 16.
+        _testFlzCompressZeroOffsetCandidate(
+            hex"01020304aabbccdd0005f9ee11223344010203ff5566778801020399887766555566778899aabbccddeeff001122334455"
+        );
+    }
+
+    function _testFlzCompressZeroOffsetCandidate(bytes memory data) private {
+        bytes32 dataHash = keccak256(data);
+        bytes memory compressed = LibZip.flzCompress(data);
+        assertEq(compressed, _flzCompressOriginal(data));
+        assertEq(LibZip.flzDecompress(compressed), data);
+        assertEq(keccak256(data), dataHash);
+    }
+
     function _testFlzCompressHashTableWidth(uint256 n) private {
         bytes memory data = _flzHashTableWidthData(n, false);
         bytes32 dataHash = keccak256(data);
