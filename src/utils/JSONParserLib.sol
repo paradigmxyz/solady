@@ -512,7 +512,7 @@ library JSONParserLib {
 
     /// @dev Returns `p`, which reverts, as upstream does, if it does not fit the 32 bits
     /// it is packed into. No source offset or node index reaches that in practice.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _pointer(uint256 p) private pure returns (uint256) {
         if (p > _BITMASK_POINTER) revert();
         return p;
@@ -538,7 +538,7 @@ library JSONParserLib {
 
     /// @dev Returns the first position from `p` on that is not whitespace, and its byte,
     /// or, past the end, the '"' that upstream places there.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _skipWhitespace(bytes memory b, uint256 p) private pure returns (uint256, uint256 c) {
         while (p < b.length) {
             c = uint8(b[p]);
@@ -550,7 +550,7 @@ library JSONParserLib {
 
     /// @dev Returns the first position from `p` on that is not a digit, and its byte,
     /// or, past the end, the '"' that upstream places there.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _skipDigits(bytes memory b, uint256 p) private pure returns (uint256, uint256 c) {
         while (p < b.length) {
             c = uint8(b[p]);
@@ -561,13 +561,13 @@ library JSONParserLib {
     }
 
     /// @dev Returns the byte of `b` at `p`, or, past its end, the '"' that upstream places there.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _charAt(bytes memory b, uint256 p) private pure returns (uint256) {
         return p < b.length ? uint8(b[p]) : 34;
     }
 
     /// @dev Returns the end and the type of the 'true', 'null' or 'false' at `p`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _parseLiteral(bytes memory b, uint256 p) private pure returns (uint256, uint256) {
         uint256 n = b.length;
         if (n - p >= 4) {
@@ -608,7 +608,7 @@ library JSONParserLib {
     /// @dev Returns the first position from `p`, which is below `n`, the length of `b`,
     /// of a '"' or a '\\', or `n` if there is none. It tests a word at a time, the last
     /// one shifted so that it starts at `p`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _skipToQuoteOrBackslash(bytes memory b, uint256 p, uint256 n)
         private
         pure
@@ -630,7 +630,7 @@ library JSONParserLib {
     }
 
     /// @dev Returns `w` with 0x80 in each byte that is a '"' or a '\\', and 0 in the others.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _quotesAndBackslashes(uint256 w) private pure returns (uint256) {
         uint256 low = 0x7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f;
         uint256 x = w ^ 0x2222222222222222222222222222222222222222222222222222222222222222;
@@ -643,7 +643,7 @@ library JSONParserLib {
 
     /// @dev Returns how many bytes of `m`, which is not zero, come before its first
     /// nonzero byte.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _leadingZeroBytes(uint256 m) private pure returns (uint256 r) {
         if (m >> 128 == 0) {
             r = 16;
@@ -666,7 +666,7 @@ library JSONParserLib {
 
     /// @dev Returns the end of the number at `p`, which starts with `c`, and the byte there,
     /// or, past the end, the '"' that upstream places there.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _parseNumber(bytes memory b, uint256 p, uint256 c)
         private
         pure
@@ -701,7 +701,7 @@ library JSONParserLib {
 
     /// @dev Parses the key at `p`, and the ':' after it. Returns the position and the
     /// first byte of the item after it, and the item's parent flag and key offsets.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _parseKey(bytes memory b, uint256 p)
         private
         pure
@@ -718,7 +718,7 @@ library JSONParserLib {
 
     /// @dev Returns the string at `bitpos` of `item`, copying it out of the parsed string
     /// and caching it on the first read.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _getStr(Item memory item, uint256 bitpos, uint256 bitposLength, uint256 inited)
         private
         pure
@@ -752,7 +752,7 @@ library JSONParserLib {
 
     /// @dev Decodes the code point whose escape's digits are at `i`, with the low
     /// surrogate's escape after a high surrogate's.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _decodeUnicodeCodePoint(bytes memory b, uint256 i, uint256 end)
         private
         pure
@@ -772,7 +772,7 @@ library JSONParserLib {
 
     /// @dev Writes `c` encoded as UTF-8 into `out` at `o`, as the start of a word that `out` has
     /// room for, and returns the position after the encoding.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _appendCodePointAsUTF8(bytes memory out, uint256 o, uint256 c)
         private
         pure
@@ -826,7 +826,7 @@ library JSONParserLib {
     /// @dev Returns the next word of digits of `b`, which is at least 32 bytes long, from `i`,
     /// which is below its length, and how many digits it holds: 32, or the rest of `b` in the
     /// low bytes of its last word, after as many '0's.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _digitsWord(bytes memory b, uint256 i) private pure returns (uint256 w, uint256 k) {
         uint256 n = b.length;
         k = n - i;
@@ -887,7 +887,7 @@ library JSONParserLib {
     /// @dev Copies `count` bytes from `src` at `srcOffset` to the start of `dst`, which the
     /// caller has just allocated. Solar copies with `mcopy`, behind a test that keeps the
     /// loop if `src` reaches into `dst`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _copyFresh(bytes memory dst, bytes memory src, uint256 srcOffset, uint256 count)
         private
         pure
@@ -898,7 +898,7 @@ library JSONParserLib {
     }
 
     /// @dev The 32 bytes of `b` at `p`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _readBytes32(bytes memory b, uint256 p) private pure returns (bytes32 result) {
         for (uint256 k; k < 32; ++k) {
             result |= bytes32(b[p + k]) >> (8 * k);
@@ -906,7 +906,7 @@ library JSONParserLib {
     }
 
     /// @dev Writes `w` into `b` at `p`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _writeBytes32(bytes memory b, uint256 p, bytes32 w) private pure {
         for (uint256 k; k < 32; ++k) {
             b[p + k] = w[k];
@@ -914,7 +914,7 @@ library JSONParserLib {
     }
 
     /// @dev The 4 bytes of `b` at `p`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _readBytes4(bytes memory b, uint256 p) private pure returns (bytes4 result) {
         for (uint256 k; k < 4; ++k) {
             result |= bytes4(b[p + k]) >> (8 * k);
@@ -922,7 +922,7 @@ library JSONParserLib {
     }
 
     /// @dev Looks up a nonzero node index in the shared table.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _item(Tree[] memory tree, uint256 id) private pure returns (Item memory) {
         return tree[0]._items[id - 1];
     }

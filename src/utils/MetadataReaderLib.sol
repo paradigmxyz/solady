@@ -228,7 +228,7 @@ library MetadataReaderLib {
 
     /// @dev The `count` bytes of `b` from `offset`, for `count` at most 32, left-aligned in a
     /// word whose other bytes are zero.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _gather(bytes memory b, uint256 offset, uint256 count)
         private
         pure

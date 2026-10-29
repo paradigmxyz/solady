@@ -129,7 +129,7 @@ library SSTORE2 {
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
 
     /// @dev Equivalent to `read(pointer, 0, 2 ** 256 - 1)`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function read(address pointer) internal view returns (bytes memory data) {
         // The data is the code after the STOP byte.
         uint256 n = pointer.code.length - 1;
@@ -138,7 +138,7 @@ library SSTORE2 {
     }
 
     /// @dev Equivalent to `read(pointer, start, 2 ** 256 - 1)`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function read(address pointer, uint256 start) internal view returns (bytes memory data) {
         uint256 n = pointer.code.length - 1;
         if (start >= n) return "";
@@ -150,7 +150,7 @@ library SSTORE2 {
     /// The `pointer` MUST be deployed via the SSTORE2 write functions.
     /// Otherwise, the behavior is undefined.
     /// Out-of-gas reverts if `pointer` does not have any code.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function read(address pointer, uint256 start, uint256 end)
         internal
         view
@@ -264,7 +264,7 @@ library SSTORE2 {
     /// with zeros. Past the code the copy reads zeros. Solidity only gives an account's whole
     /// code.
     /// @custom:solar-trusted
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _codeRead(address target, uint256 start, uint256 count)
         private
         view

@@ -132,7 +132,7 @@ library LibMap {
     }
 
     /// @dev Returns the value at `index` in `map`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function get(mapping(uint256 => uint256) storage map, uint256 index, uint256 bitWidth)
         internal
         view
@@ -144,7 +144,7 @@ library LibMap {
     }
 
     /// @dev Updates the value at `index` in `map`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function set(
         mapping(uint256 => uint256) storage map,
         uint256 index,
@@ -260,13 +260,13 @@ library LibMap {
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
 
     /// @dev Returns `x / y`, returning 0 if `y` is zero.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _rawDiv(uint256 x, uint256 y) private pure returns (uint256 z) {
         if (y != 0) z = x / y;
     }
 
     /// @dev Returns `x % y`, returning 0 if `y` is zero.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _rawMod(uint256 x, uint256 y) private pure returns (uint256 z) {
         if (y != 0) z = x % y;
     }
@@ -274,14 +274,14 @@ library LibMap {
     /// @dev Returns `(index % d) * bitWidth`, the bit offset of `index` in its bucket
     /// of `d` values: below 256, as `d * bitWidth <= 256` whenever `d` is not zero.
     /// The masks keep both factors whole and let the product skip its overflow check.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _offset(uint256 index, uint256 d, uint256 bitWidth) private pure returns (uint256) {
         return (_rawMod(index, d) & 0xffff) * (bitWidth & 0xffff);
     }
 
     /// @dev Returns `(1 << bitWidth) - 1`, every bit for a width of 256 or more: the
     /// shift clears all of them then, as the assembly's subtraction wraps.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _mask(uint256 bitWidth) private pure returns (uint256) {
         return ~(type(uint256).max << bitWidth);
     }

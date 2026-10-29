@@ -370,14 +370,14 @@ library EfficientHashLib {
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
 
     /// @dev Returns `keccak256(abi.encode(buffer[0], .., buffer[buffer.length - 1]))`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function hash(bytes32[] memory buffer) internal pure returns (bytes32) {
         return keccak256(abi.encodePacked(buffer));
     }
 
     /// @dev Sets `buffer[i]` to `value`, without a bounds check.
     /// Returns the `buffer` for function chaining.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function set(bytes32[] memory buffer, uint256 i, bytes32 value)
         internal
         pure
@@ -389,7 +389,7 @@ library EfficientHashLib {
 
     /// @dev Sets `buffer[i]` to `value`, without a bounds check.
     /// Returns the `buffer` for function chaining.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function set(bytes32[] memory buffer, uint256 i, uint256 value)
         internal
         pure
@@ -408,7 +408,7 @@ library EfficientHashLib {
     /// No-op if `buffer.length` is zero, or if new memory has been allocated after `buffer`.
     /// Solidity cannot move the free memory pointer, so this keeps the upstream assembly.
     /// @custom:solar-trusted
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function free(bytes32[] memory buffer) internal pure {
         /// @solidity memory-safe-assembly
         assembly {
@@ -534,7 +534,7 @@ library EfficientHashLib {
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
 
     /// @dev The 32 bytes of `b` at `offset`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _readBytes32(bytes memory b, uint256 offset) private pure returns (bytes32 result) {
         for (uint256 k; k < 32; ++k) {
             result |= bytes32(b[offset + k]) >> (8 * k);

@@ -136,14 +136,14 @@ library LibRLP {
     function p() internal pure returns (List memory result) {}
 
     /// @dev Returns a new list with `x` as the only element. Equivalent to `LibRLP.p().p(x)`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function p(uint256 x) internal pure returns (List memory result) {
         result = _newList();
         result._first._word = x;
     }
 
     /// @dev Returns a new list with `x` as the only element. Equivalent to `LibRLP.p().p(x)`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function p(address x) internal pure returns (List memory result) {
         result = _newList();
         result._first._kind = 4;
@@ -151,14 +151,14 @@ library LibRLP {
     }
 
     /// @dev Returns a new list with `x` as the only element. Equivalent to `LibRLP.p().p(x)`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function p(bool x) internal pure returns (List memory result) {
         result = _newList();
         result._first._word = x ? 1 : 0;
     }
 
     /// @dev Returns a new list with `x` as the only element. Equivalent to `LibRLP.p().p(x)`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function p(bytes memory x) internal pure returns (List memory result) {
         result = _newList();
         result._first._kind = 2;
@@ -166,7 +166,7 @@ library LibRLP {
     }
 
     /// @dev Returns a new list with `x` as the only element. Equivalent to `LibRLP.p().p(x)`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function p(List memory x) internal pure returns (List memory result) {
         result = _newList();
         result._first._kind = 3;
@@ -175,14 +175,14 @@ library LibRLP {
     }
 
     /// @dev Appends `x` to `list`. Returns `list` for function chaining.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function p(List memory list, uint256 x) internal pure returns (List memory result) {
         _append(list)._word = x;
         result = list;
     }
 
     /// @dev Appends `x` to `list`. Returns `list` for function chaining.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function p(List memory list, address x) internal pure returns (List memory result) {
         Item memory item = _append(list);
         item._kind = 4;
@@ -191,14 +191,14 @@ library LibRLP {
     }
 
     /// @dev Appends `x` to `list`. Returns `list` for function chaining.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function p(List memory list, bool x) internal pure returns (List memory result) {
         _append(list)._word = x ? 1 : 0;
         result = list;
     }
 
     /// @dev Appends `x` to `list`. Returns `list` for function chaining.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function p(List memory list, bytes memory x) internal pure returns (List memory result) {
         Item memory item = _append(list);
         item._kind = 2;
@@ -207,7 +207,7 @@ library LibRLP {
     }
 
     /// @dev Appends `x` to `list`. Returns `list` for function chaining.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function p(List memory list, List memory x) internal pure returns (List memory result) {
         Item memory item = _append(list);
         item._kind = 3;
@@ -269,13 +269,13 @@ library LibRLP {
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
 
     /// @dev Initializes the first embedded item; the second needs no further allocation.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _newList() private pure returns (List memory result) {
         result._length = 1;
     }
 
     /// @dev Appends an item, preserving the identity of lists and existing items when growing.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _append(List memory list) private pure returns (Item memory item) {
         // The index and doubled capacity fit whenever the backing allocation can exist.
         unchecked {
@@ -296,7 +296,7 @@ library LibRLP {
     }
 
     /// @dev The first two items are embedded; longer lists use the growable tail.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _item(List memory list, uint256 i) private pure returns (Item memory) {
         if (i == 0) return list._first;
         if (i == 1) return list._second;
@@ -391,7 +391,7 @@ library LibRLP {
     }
 
     /// @dev Upstream rejects payload lengths requiring more than four bytes.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _lengthOfLength(uint256 n) private pure returns (uint256) {
         if (n >> 32 != 0) revert();
         return _byteLength(n);
@@ -399,7 +399,7 @@ library LibRLP {
 
     /// @dev The number of bytes of `x` from its first nonzero one, at least one: its base-256
     /// logarithm plus one, by the binary search of `log2` to whole bytes.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _byteLength(uint256 x) private pure returns (uint256) {
         // The shift counts are at most 248, and the result is at most 32.
         unchecked {
@@ -443,7 +443,7 @@ library LibRLP {
     }
 
     /// @dev Packs one item into a word, or returns length 32 when a list cannot hold it.
-    /// @custom:solar-noinline
+    /// @custom:solar-inline never
     function _packItem(Item memory item) private pure returns (uint256 w, uint256 n) {
         // Each packed item occupies at most 31 bytes, so the shift counts and prefixes fit.
         unchecked {

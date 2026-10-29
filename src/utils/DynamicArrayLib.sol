@@ -47,7 +47,7 @@ library DynamicArrayLib {
     // e.g. `array.set(0, 1).set(1, 2)`.
 
     /// @dev Returns a uint256 array with `n` elements. The elements are not zeroized.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function malloc(uint256 n) internal pure returns (uint256[] memory result) {
         result = new uint256[](n);
     }
@@ -61,37 +61,37 @@ library DynamicArrayLib {
     }
 
     /// @dev Returns the element at `a[i]`, without bounds checking.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function get(uint256[] memory a, uint256 i) internal pure returns (uint256 result) {
         result = a[i];
     }
 
     /// @dev Returns the element at `a[i]`, without bounds checking.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function getUint256(uint256[] memory a, uint256 i) internal pure returns (uint256 result) {
         result = a[i];
     }
 
     /// @dev Returns the element at `a[i]`, without bounds checking.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function getAddress(uint256[] memory a, uint256 i) internal pure returns (address result) {
         result = address(uint160(a[i]));
     }
 
     /// @dev Returns the element at `a[i]`, without bounds checking.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function getBool(uint256[] memory a, uint256 i) internal pure returns (bool result) {
         result = a[i] != 0;
     }
 
     /// @dev Returns the element at `a[i]`, without bounds checking.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function getBytes32(uint256[] memory a, uint256 i) internal pure returns (bytes32 result) {
         result = bytes32(a[i]);
     }
 
     /// @dev Sets `a.data[i]` to `data`, without bounds checking.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function set(uint256[] memory a, uint256 i, uint256 data)
         internal
         pure
@@ -102,7 +102,7 @@ library DynamicArrayLib {
     }
 
     /// @dev Sets `a.data[i]` to `data`, without bounds checking.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function set(uint256[] memory a, uint256 i, address data)
         internal
         pure
@@ -113,7 +113,7 @@ library DynamicArrayLib {
     }
 
     /// @dev Sets `a.data[i]` to `data`, without bounds checking.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function set(uint256[] memory a, uint256 i, bool data)
         internal
         pure
@@ -124,7 +124,7 @@ library DynamicArrayLib {
     }
 
     /// @dev Sets `a.data[i]` to `data`, without bounds checking.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function set(uint256[] memory a, uint256 i, bytes32 data)
         internal
         pure
@@ -190,7 +190,7 @@ library DynamicArrayLib {
 
     /// @dev Reduces the size of `a` to `n`.
     /// If `n` is greater than the size of `a`, this will be a no-op.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function truncate(uint256[] memory a, uint256 n)
         internal
         pure
@@ -597,37 +597,37 @@ library DynamicArrayLib {
     }
 
     /// @dev Returns the element at `a.data[i]`, without bounds checking.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function get(DynamicArray memory a, uint256 i) internal pure returns (uint256 result) {
         result = a.data[i];
     }
 
     /// @dev Returns the element at `a.data[i]`, without bounds checking.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function getUint256(DynamicArray memory a, uint256 i) internal pure returns (uint256 result) {
         result = a.data[i];
     }
 
     /// @dev Returns the element at `a.data[i]`, without bounds checking.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function getAddress(DynamicArray memory a, uint256 i) internal pure returns (address result) {
         result = address(uint160(a.data[i]));
     }
 
     /// @dev Returns the element at `a.data[i]`, without bounds checking.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function getBool(DynamicArray memory a, uint256 i) internal pure returns (bool result) {
         result = a.data[i] != 0;
     }
 
     /// @dev Returns the element at `a.data[i]`, without bounds checking.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function getBytes32(DynamicArray memory a, uint256 i) internal pure returns (bytes32 result) {
         result = bytes32(a.data[i]);
     }
 
     /// @dev Sets `a.data[i]` to `data`, without bounds checking.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function set(DynamicArray memory a, uint256 i, uint256 data)
         internal
         pure
@@ -639,7 +639,7 @@ library DynamicArrayLib {
     }
 
     /// @dev Sets `a.data[i]` to `data`, without bounds checking.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function set(DynamicArray memory a, uint256 i, address data)
         internal
         pure
@@ -651,7 +651,7 @@ library DynamicArrayLib {
     }
 
     /// @dev Sets `a.data[i]` to `data`, without bounds checking.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function set(DynamicArray memory a, uint256 i, bool data)
         internal
         pure
@@ -663,7 +663,7 @@ library DynamicArrayLib {
     }
 
     /// @dev Sets `a.data[i]` to `data`, without bounds checking.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function set(DynamicArray memory a, uint256 i, bytes32 data)
         internal
         pure

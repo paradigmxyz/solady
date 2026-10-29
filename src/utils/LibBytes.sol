@@ -361,7 +361,7 @@ library LibBytes {
 
     /// @dev Returns a concatenated bytes of `a` and `b`.
     /// Cheaper than `bytes.concat()` and does not de-align the free memory pointer.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function concat(bytes memory a, bytes memory b) internal pure returns (bytes memory result) {
         // A word of zeros after the bytes pads their last word, inside the allocation, under
         // every compiler (legacy solc's `bytes.concat` neither clears nor allocates it), and is
@@ -525,7 +525,7 @@ library LibBytes {
     /// 32 to a word, the last word zero past them. Solidity cannot name a slot it did not
     /// allocate.
     /// @custom:solar-trusted
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _sstoreFrom(BytesStorage storage $, bytes memory b, uint256 offset) private {
         if (offset >= b.length) _outOfBounds();
         uint256 slot = _dataSlot(_slot($));
@@ -549,7 +549,7 @@ library LibBytes {
 
     /// @dev `_sstoreFrom` from calldata.
     /// @custom:solar-trusted
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _sstoreCalldataFrom(BytesStorage storage $, bytes calldata b, uint256 offset) private {
         if (offset >= b.length) _outOfBounds();
         uint256 slot = _dataSlot(_slot($));
@@ -575,7 +575,7 @@ library LibBytes {
     /// rest of the last word written and can reach up to 32 bytes past `b`'s allocation:
     /// `b` must be the last allocation, as for `_truncate`'s word past the end in LibString.
     /// @custom:solar-trusted
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _sloadInto(uint256 slot, bytes memory b, uint256 offset) private view {
         if (offset >= b.length) _outOfBounds();
         /// @solidity memory-safe-assembly
@@ -607,7 +607,7 @@ library LibBytes {
     /// legacy solc's `new bytes(n)` leaves dirty. `b` must be the last allocation, so that the
     /// rest of that word is free memory.
     /// @custom:solar-trusted
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _zeroPad(bytes memory b) private pure {
         /// @solidity memory-safe-assembly
         assembly {
@@ -616,7 +616,7 @@ library LibBytes {
     }
 
     /// @dev The 32 bytes of `b` at `offset`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _readBytes32(bytes memory b, uint256 offset) private pure returns (bytes32 result) {
         for (uint256 k; k < 32; ++k) {
             result |= bytes32(b[offset + k]) >> (8 * k);
@@ -624,7 +624,7 @@ library LibBytes {
     }
 
     /// @dev Writes `value` into `b` at `offset`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _writeBytes32(bytes memory b, uint256 offset, bytes32 value) private pure {
         for (uint256 k; k < 32; ++k) {
             b[offset + k] = value[k];
@@ -632,7 +632,7 @@ library LibBytes {
     }
 
     /// @dev Writes the leading `count` bytes of `value`, at most a word, to `b` at `offset`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _writeBytesN(bytes memory b, uint256 offset, bytes32 value, uint256 count)
         private
         pure
@@ -643,7 +643,7 @@ library LibBytes {
     }
 
     /// @dev The 32 bytes of `b` at `offset`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _calldataReadBytes32(bytes calldata b, uint256 offset)
         private
         pure
@@ -763,7 +763,7 @@ library LibBytes {
     /// @dev Stores `replacement` into `out` at `o`, and returns the offset
     /// after it. Up to a word goes as its first word `rhead`, which also writes
     /// the bytes after it: `out` needs a word of slack.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _putReplacement(bytes memory out, uint256 o, bytes memory replacement, bytes32 rhead)
         private
         pure
@@ -777,7 +777,7 @@ library LibBytes {
     /// @dev Copies the `count` bytes of `src` at `from` into `dst` at `o`, and
     /// returns the offset after them. Up to a word goes as one word, which also
     /// writes the bytes after the copied ones: `dst` needs a word of slack.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _copyPiece(bytes memory dst, uint256 o, bytes memory src, uint256 from, uint256 count)
         private
         pure
@@ -956,7 +956,7 @@ library LibBytes {
     /// `subject`, or `NOT_FOUND`; `last + needle.length` fits the subject and
     /// `head` is as `_matchAt` takes it. The offset `from`
     /// itself, where the next match of a run is, is tried before any scan.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _find(
         bytes memory subject,
         uint256 from,
@@ -1003,7 +1003,7 @@ library LibBytes {
     /// rest of a longer one is compared a word at a time. Upstream compares the
     /// hashes of the two ranges; equal bytes are equal hashes, and a different
     /// range with the needle's hash is a keccak-256 collision.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _matchAt(bytes memory subject, uint256 at, bytes memory needle, bytes32 head)
         private
         pure
@@ -1029,14 +1029,14 @@ library LibBytes {
     }
 
     /// @dev The first bytes of `needle`, up to a word, left-aligned.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _head(bytes memory needle) private pure returns (bytes32) {
         return _readBytesN(needle, 0, needle.length);
     }
 
     /// @dev The bytes of `b` from `i`, up to a word, left-aligned: the word at
     /// `i` zero-padded past the end of `b`, where `i < b.length`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _wordAt(bytes memory b, uint256 i) private pure returns (uint256) {
         uint256 rest = b.length - i;
         return rest < 32 ? uint256(_readBytesN(b, i, rest)) : uint256(_readBytes32(b, i));
@@ -1045,7 +1045,7 @@ library LibBytes {
     /// @dev `0x80` in each byte of `z` that is zero, and zero in every other
     /// byte: the low seven bits of a byte plus `0x7f` carry into its top bit
     /// unless they are all clear, and never into the next byte.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _zeroBytes(uint256 z) private pure returns (uint256) {
         return ~(((z & LANES_7F) + LANES_7F) | z | LANES_7F);
     }
@@ -1078,7 +1078,7 @@ library LibBytes {
     }
 
     /// @dev A new buffer holding the bytes of `s` from `start` to `end`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _sliceFresh(bytes memory s, uint256 start, uint256 end)
         private
         pure
@@ -1093,7 +1093,7 @@ library LibBytes {
     /// `dstOffset`, front to back. Callers pass a `dst` they have just
     /// allocated; Solar inlines the loop into them and copies with `mcopy`,
     /// behind a test that keeps the loop if `src` reaches into `dst`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _copyFresh(
         bytes memory dst,
         uint256 dstOffset,
@@ -1135,7 +1135,7 @@ library LibBytes {
     }
 
     /// @dev The leading `count` bytes of `b` from `offset`, at most a word, left-aligned.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _readBytesN(bytes memory b, uint256 offset, uint256 count)
         private
         pure
@@ -1209,7 +1209,7 @@ library LibBytes {
 
     /// @dev The storage slot of `$`.
     /// @custom:solar-trusted
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _slot(BytesStorage storage $) private pure returns (uint256 slot) {
         /// @solidity memory-safe-assembly
         assembly {
@@ -1224,7 +1224,7 @@ library LibBytes {
 
     /// @dev The word in storage slot `slot`. Solidity cannot name a slot it did not allocate.
     /// @custom:solar-trusted
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _sload(uint256 slot) private view returns (bytes32 value) {
         /// @solidity memory-safe-assembly
         assembly {
@@ -1234,7 +1234,7 @@ library LibBytes {
 
     /// @dev `a + b` modulo `2**256`.
     /// @custom:solar-trusted
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _add(uint256 a, uint256 b) private pure returns (uint256 c) {
         unchecked {
             c = a + b;

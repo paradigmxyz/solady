@@ -451,7 +451,7 @@ library LibClone {
     /// The `instance` MUST be deployed via the clone with immutable args functions.
     /// Otherwise, the behavior is undefined.
     /// Out-of-gas reverts if `instance` does not have any code.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function argsOnClone(address instance, uint256 start, uint256 end)
         internal
         view
@@ -1697,13 +1697,13 @@ library LibClone {
 
     /// @dev The arguments of the proxy `instance`, whose code before them is
     /// `base` bytes.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _argsOn(address instance, uint256 base) private view returns (bytes memory) {
         return _codeRead(instance, base, instance.code.length - base);
     }
 
     /// @dev The arguments of the proxy `instance` from `start`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _argsOn(address instance, uint256 base, uint256 start)
         private
         view
@@ -1719,7 +1719,7 @@ library LibClone {
     /// the assembly does. Past the code the copy reads zeros, so a last byte that is
     /// not zero lies inside the code, and so does the whole range; otherwise the end
     /// of the arguments cuts it, and the zeros past it stay as padding.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _argsOn(address instance, uint256 base, uint256 start, uint256 end)
         private
         view
@@ -1793,7 +1793,7 @@ library LibClone {
     }
 
     /// @dev The 20 bytes of `b` at `offset`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _readBytes20(bytes memory b, uint256 offset) private pure returns (bytes20 result) {
         for (uint256 k; k < 20; ++k) {
             result |= bytes20(b[offset + k]) >> (8 * k);
@@ -1801,7 +1801,7 @@ library LibClone {
     }
 
     /// @dev The 32 bytes of `b` at `offset`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _readBytes32(bytes memory b, uint256 offset) private pure returns (bytes32 result) {
         for (uint256 k; k < 32; ++k) {
             result |= bytes32(b[offset + k]) >> (8 * k);
@@ -1928,7 +1928,7 @@ library LibClone {
     /// with zeros. Past the code the copy reads zeros. Solidity only gives an account's whole
     /// code.
     /// @custom:solar-trusted
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _codeRead(address target, uint256 start, uint256 count)
         private
         view
@@ -1958,7 +1958,7 @@ library LibClone {
 
     /// @dev `c` without its last 32 bytes, which are zeros, so that the bytes past its
     /// end read as zero padding wherever the free memory pointer ends up.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _withoutZeroWord(bytes memory c) private pure returns (bytes memory) {
         _setLength(c, c.length - 32);
         return c;

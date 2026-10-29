@@ -155,7 +155,7 @@ library P256 {
     /// does. Returns whether the call succeeded, the answer's size and that word. Solidity's
     /// `staticcall` copies the whole answer into new memory instead.
     /// @custom:solar-trusted
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _staticCallWord(address target, uint256 gasLimit, bytes memory payload)
         private
         view

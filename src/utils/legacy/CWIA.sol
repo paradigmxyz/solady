@@ -274,7 +274,7 @@ abstract contract CWIA {
 
     /// @dev `a + b` modulo `2**256`, as `add` computes it.
     /// @custom:solar-trusted
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _cwiaAdd(uint256 a, uint256 b) private pure returns (uint256 c) {
         unchecked {
             c = a + b;
@@ -283,7 +283,7 @@ abstract contract CWIA {
 
     /// @dev `a - b` modulo `2**256`, as `sub` computes it.
     /// @custom:solar-trusted
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _cwiaSub(uint256 a, uint256 b) private pure returns (uint256 c) {
         unchecked {
             c = a - b;
@@ -291,7 +291,7 @@ abstract contract CWIA {
     }
 
     /// @dev The calldata word at `start`, whose bytes past the end of the calldata read as zero.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _cwiaCalldataWord(uint256 start) private pure returns (bytes32 w) {
         uint256 n = msg.data.length;
         if (start < n) {

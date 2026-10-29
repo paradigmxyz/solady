@@ -450,7 +450,7 @@ library MinHeapLib {
     /// starting with the left child at `childPos`, which skips this step from the end of
     /// the heap on. Then moves `value` up from where the hole stops, past the larger
     /// parents, and stores it.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _sift(uint256[] memory data, uint256 pos, uint256 childPos, uint256 value)
         private
         pure
@@ -488,7 +488,7 @@ library MinHeapLib {
     /// after the removal, and inserts `v` from heap position `i`: the hole moves down
     /// along the smaller children, the left one on a tie, then `v` moves up from where
     /// it stops. The hole is the parent of the odd left child, `c >> 1`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _pSiftup(
         uint256[] memory values,
         uint256[] memory indices,
@@ -516,7 +516,7 @@ library MinHeapLib {
 
     /// @dev Places `v` from heap position `i` in the hole at `p` of the priority queue
     /// of `smallest`, moving it up past the larger parents.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _pSiftdown(
         uint256[] memory values,
         uint256[] memory indices,
@@ -580,7 +580,7 @@ library MinHeapLib {
 
     /// @dev Sets the length of `data`, which its capacity covers, to `n`.
     /// @custom:solar-trusted
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _setLength(uint256[] memory data, uint256 n) private pure {
         /// @solidity memory-safe-assembly
         assembly {

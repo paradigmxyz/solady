@@ -78,7 +78,7 @@ library SemVerLib {
 
     /// @dev The number that the digits at the top of `w` spell in base 256, which orders as
     /// their decimal number does, and `w` after them.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _number(uint256 w) private pure returns (uint256 r, uint256 rest) {
         while (true) {
             uint256 digit = (w >> 248) ^ 48;
@@ -92,7 +92,7 @@ library SemVerLib {
     /// @dev Parses the pre-release identifier at the top of `w`, which ends at a `\x00`, `.`
     /// or `+`. Returns whether it has a byte that is not a digit; if it has, its bytes
     /// left-aligned in a word, else the number its digits spell in base 256; and `w` after it.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _identifier(uint256 w)
         private
         pure

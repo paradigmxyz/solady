@@ -148,7 +148,7 @@ library MerkleProofLib {
     /// written queue and the proof, and every proof element was used. `hashes`
     /// has room for every hash the flags make, so `back` never reaches its
     /// length; testing that first bounds every queue index the step reads.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _rebuild(
         bytes32[] memory hashes,
         uint256 back,
@@ -180,7 +180,7 @@ library MerkleProofLib {
     }
 
     /// @dev `_rebuild` for a proof and flags in calldata.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _rebuildCalldata(
         bytes32[] memory hashes,
         uint256 back,

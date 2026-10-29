@@ -129,7 +129,7 @@ library RedBlackTreeLib {
 
     /// @dev Returns a pointer to the value `x`.
     /// If the value `x` is not in the tree, the returned pointer will be empty.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function find(Tree storage tree, uint256 x) internal view returns (bytes32 result) {
         (uint256 nodes,, uint256 key) = _find(tree, x);
         result = _pack(nodes, key);
@@ -296,7 +296,7 @@ library RedBlackTreeLib {
     }
 
     /// @dev Step the pointer `ptr` forwards or backwards.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _step(bytes32 ptr, uint256 L, uint256 R) private view returns (bytes32 result) {
         if (ptr == bytes32(0)) return ptr;
         (uint256 nodes, uint256 target) = _unpack(ptr);
@@ -357,7 +357,7 @@ library RedBlackTreeLib {
     }
 
     /// @dev Finds `x` in `tree`. The `key` will be zero if `x` is not found.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _find(Tree storage tree, uint256 x)
         private
         view
@@ -411,26 +411,26 @@ library RedBlackTreeLib {
     }
 
     /// @dev Returns the index at bit position `bitpos` of `packed`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _getKey(uint256 packed, uint256 bitpos) private pure returns (uint256) {
         return _BITMASK_KEY & (packed >> bitpos);
     }
 
     /// @dev Returns `packed` with the index at bit position `bitpos` set to `key`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _setKey(uint256 packed, uint256 bitpos, uint256 key) private pure returns (uint256) {
         return (~(_BITMASK_KEY << bitpos) & packed) | (key << bitpos);
     }
 
     /// @dev Sets the parent index of the node in slot `s` to `parent`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _setParent(uint256 s, uint256 parent) private {
         _sstore(s, _setKey(_sload(s), _BITPOS_PARENT, parent));
     }
 
     /// @dev Points the `L` child link of the node in slot `s` to `cursor` if it holds `key`,
     /// and its `R` child link otherwise.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _relink(uint256 s, uint256 key, uint256 cursor, uint256 L, uint256 R) private {
         uint256 packed = _sload(s);
         _sstore(s, _setKey(packed, key == _getKey(packed, L) ? L : R, cursor));
@@ -438,7 +438,7 @@ library RedBlackTreeLib {
 
     /// @dev Rotates the subtree at node `key` towards `L`, where `R` is the other side.
     /// Returns the new root index.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _rotate(uint256 nodes, uint256 key, uint256 L, uint256 R, uint256 root)
         private
         returns (uint256)
@@ -603,7 +603,7 @@ library RedBlackTreeLib {
 
     /// @dev Points the child link of node `parent` that holds `b` to `a`, or makes `a` the
     /// root if `parent` is null. Returns the new root index.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _replaceParent(uint256 nodes, uint256 parent, uint256 a, uint256 b, uint256 root)
         private
         returns (uint256)

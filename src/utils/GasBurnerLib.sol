@@ -93,7 +93,7 @@ library GasBurnerLib {
 
     /// @dev Writes `value` into the bytes of `m`'s words at byte `offset`, across two words
     /// when `offset` is not a multiple of 32.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _storeWordAt(bytes32[] memory m, uint256 offset, bytes32 value) private pure {
         uint256 w = offset >> 5;
         uint256 shift = (offset & 31) << 3;
@@ -109,7 +109,7 @@ library GasBurnerLib {
     /// @dev The first word of `b`'s bytes, which `b` must have, as a one-word array to write
     /// it through. Solidity writes a word into `bytes` only a byte at a time.
     /// @custom:solar-trusted
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _firstWord(bytes memory b) private pure returns (bytes32[1] memory result) {
         if (b.length == 0) revert();
         /// @solidity memory-safe-assembly
@@ -122,7 +122,7 @@ library GasBurnerLib {
     /// first word of the answer over `payload`'s first word, which `payload` must have.
     /// Solidity's `staticcall` copies the whole answer into new memory instead.
     /// @custom:solar-trusted
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _staticCallInto(address target, uint256 gasLimit, bytes memory payload)
         private
         view
@@ -139,7 +139,7 @@ library GasBurnerLib {
     /// @dev Copies `count` bytes of the running code from `start`, zeros past its end, into
     /// `m`'s words at byte `offset`. Solidity cannot copy the running code.
     /// @custom:solar-trusted
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _codeCopyInto(bytes32[] memory m, uint256 offset, uint256 start, uint256 count)
         private
         pure
@@ -155,7 +155,7 @@ library GasBurnerLib {
     /// @dev Logs the first `length` bytes of `m`'s words with no topics. Solidity logs event
     /// data in whole words.
     /// @custom:solar-trusted
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _log0(bytes32[] memory m, uint256 length) private {
         if (length > m.length << 5) revert();
         /// @solidity memory-safe-assembly

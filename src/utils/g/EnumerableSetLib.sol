@@ -671,7 +671,7 @@ library EnumerableSetLib {
 
     /// @dev The word that stands for address `value` in a set: zero is the sentinel.
     /// Reverts if `value` is the sentinel itself.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _addressWord(address value) private pure returns (uint256 v) {
         v = uint160(value);
         if (v == _ZERO_SENTINEL) revert ValueIsZeroSentinel();
@@ -680,7 +680,7 @@ library EnumerableSetLib {
 
     /// @dev The word that stands for `value` in a set: zero is the sentinel.
     /// Reverts if `value` is the sentinel itself.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _word(bytes32 value) private pure returns (uint256 v) {
         v = uint256(value);
         if (v == _ZERO_SENTINEL) revert ValueIsZeroSentinel();
@@ -698,7 +698,7 @@ library EnumerableSetLib {
     }
 
     /// @dev Selects an entry without hashing the first three indices.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _entry(Entries storage entries, uint256 i)
         private
         view

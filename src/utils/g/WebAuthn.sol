@@ -289,7 +289,7 @@ library WebAuthn {
     /// `encoded` and a closing `"` at `c`, with both indices below `2**128` so that no sum
     /// overflows, as the assembly checks with hashes of the same bytes. Every range is
     /// checked before it is read.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _checkClientData(
         bytes memory clientDataJSON,
         uint256 c,
@@ -322,7 +322,7 @@ library WebAuthn {
 
     /// @dev The six words of the encoded tuple at `p` in `encodedAuth`, which lie in it.
     /// The tuple of `abi.encode(auth)` follows its offset, and is decoded in one go.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _readHead(bytes memory encodedAuth, uint256 p)
         private
         pure
@@ -352,7 +352,7 @@ library WebAuthn {
     /// @dev Whether the `bytes` whose length word is at `offset` in `b` ends within `b`, as
     /// the assembly tests it: the address after the length word plus the length, with
     /// wrap-around, is at most the end of `b`. A length word that does not lie in `b` fails.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _endsIn(bytes memory b, uint256 offset) private pure returns (bool) {
         uint256 n = b.length;
         if (n < 0x20 || offset > n - 0x20) return false;
@@ -364,7 +364,7 @@ library WebAuthn {
     }
 
     /// @dev A copy of the `count` bytes of `b` at `offset`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _slice(bytes memory b, uint256 offset, uint256 count)
         private
         pure
@@ -377,7 +377,7 @@ library WebAuthn {
     }
 
     /// @dev The 32 bytes of `b` at `offset`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _readBytes32(bytes memory b, uint256 offset) private pure returns (bytes32 result) {
         for (uint256 k; k < 32; ++k) {
             result |= bytes32(b[offset + k]) >> (8 * k);
@@ -385,7 +385,7 @@ library WebAuthn {
     }
 
     /// @dev The `count` bytes of `b` at `offset`, at most a word, left-aligned.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _readBytesN(bytes memory b, uint256 offset, uint256 count)
         private
         pure
@@ -398,7 +398,7 @@ library WebAuthn {
 
     /// @dev The address of `b`. Solidity cannot convert a reference to a number.
     /// @custom:solar-trusted
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _addr(bytes memory b) private pure returns (uint256 result) {
         /// @solidity memory-safe-assembly
         assembly {
@@ -411,7 +411,7 @@ library WebAuthn {
     /// word must lie in `b`; the bytes extend past `b` only for a length whose end wraps
     /// around, which the assembly lets through as well.
     /// @custom:solar-trusted
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _bytesAt(bytes memory b, uint256 offset) private pure returns (bytes memory result) {
         if (b.length < 0x20 || offset > b.length - 0x20) revert();
         /// @solidity memory-safe-assembly

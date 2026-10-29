@@ -96,7 +96,7 @@ library LibBit {
 
     /// @dev Returns the number of zero bytes in `x`.
     /// To get the number of non-zero bytes, simply do `32 - countZeroBytes(x)`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function countZeroBytes(uint256 x) internal pure returns (uint256 c) {
         // A zero byte keeps its top bit clear through `(x & m) + m` and `| x`,
         // so the complement marks it with `0x80`. Shifted down to one per zero
@@ -339,7 +339,7 @@ library LibBit {
     }
 
     /// @dev Writes the leading `count` bytes of `value` at the start of `b`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _writeBytesN(bytes memory b, bytes32 value, uint256 count) private pure {
         for (uint256 k; k < count; ++k) {
             b[k] = value[k];
@@ -347,7 +347,7 @@ library LibBit {
     }
 
     /// @dev The 16 bytes of `b` at `offset`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _readBytes16(bytes memory b, uint256 offset) private pure returns (bytes16 result) {
         for (uint256 k; k < 16; ++k) {
             result |= bytes16(b[offset + k]) >> (8 * k);
@@ -355,7 +355,7 @@ library LibBit {
     }
 
     /// @dev Writes `value` into `b` at `offset`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _writeBytes32(bytes memory b, uint256 offset, bytes32 value) private pure {
         for (uint256 k; k < 32; ++k) {
             b[offset + k] = value[k];
@@ -363,7 +363,7 @@ library LibBit {
     }
 
     /// @dev The leading `count` bytes of `b` from `offset`, at most a word, left-aligned.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _readBytesN(bytes memory b, uint256 offset, uint256 count)
         private
         pure
@@ -375,7 +375,7 @@ library LibBit {
     }
 
     /// @dev The 32 bytes of `b` at `offset`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _readBytes32(bytes memory b, uint256 offset) private pure returns (bytes32 result) {
         for (uint256 k; k < 32; ++k) {
             result |= bytes32(b[offset + k]) >> (8 * k);
@@ -384,7 +384,7 @@ library LibBit {
 
     /// @dev Reserves and zeroes whole words before setting the logical length.
     /// Legacy solc only zeroes the logical length of `new bytes(n)`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _newBytes(uint256 n) private pure returns (bytes memory) {
         // Keep the allocator's resource panic instead of overflowing the rounding addition.
         if (n > type(uint64).max) return new bytes(n);

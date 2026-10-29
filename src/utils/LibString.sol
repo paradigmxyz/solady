@@ -208,7 +208,7 @@ library LibString {
     /// @dev Helper to cast `$` to a `BytesStorage`.
     /// Solidity cannot retype a storage reference, so this keeps the upstream assembly.
     /// @custom:solar-trusted
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function bytesStorage(StringStorage storage $)
         internal
         pure
@@ -513,7 +513,7 @@ library LibString {
 
     /// @dev Returns a concatenated string of `a` and `b`.
     /// Cheaper than `string.concat()` and does not de-align the free memory pointer.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function concat(string memory a, string memory b) internal pure returns (string memory) {
         return string(LibBytes.concat(bytes(a), bytes(b)));
     }
@@ -821,7 +821,7 @@ library LibString {
     /// The top group loses its leading zeros, and the output is three words,
     /// written whole and cut to the digits, with the full words shifted into
     /// place after the sign and the top word's digits.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _decimal(uint256 value, bool negative) private pure returns (string memory) {
         // One digit, after the sign, is written directly.
         if (value < 10) {
@@ -890,7 +890,7 @@ library LibString {
     /// byte in the low eight bytes, the most significant first: two halves, then
     /// quarters, then single digits, each split by a multiply by the divisor's
     /// reciprocal, which is exact for its lane's range and stays inside the lane.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _decimalGroup(uint256 x) private pure returns (uint256 y) {
         y = ((x / 1e4) << 32) | (x % 1e4);
         // `ceil(2**20 / 100)` and `ceil(2**10 / 10)`; `2**16 - 100` and `2**8 - 10`
@@ -961,7 +961,7 @@ library LibString {
 
     /// @dev The JSON escape of the byte `c`, which is `"`, `\` or below 0x20,
     /// left-aligned, and its length.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _jsonEscape(uint256 c) private pure returns (bytes32, uint256) {
         // `\"`, `\\`, `\b`, `\t`, `\n`, `\f` and `\r`, by the byte's low five bits.
         if ((_JSON_SHORT_ESCAPED >> c) & 1 != 0) {
@@ -1017,7 +1017,7 @@ library LibString {
     /// @dev The HTML entity of the byte `c`, which is one `escapeHTML` replaces,
     /// left-aligned, and its length: the byte's low five bits pick the entity's
     /// length and offset in the string of all five.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _htmlEntity(uint256 c) private pure returns (bytes32, uint256) {
         uint256 t = uint8(_HTML_ENTITY_SPANS[c & 31]);
         return (_HTML_ENTITIES << ((t & 31) << 3), t >> 5);
@@ -1112,7 +1112,7 @@ library LibString {
     /// `0x80 - a` reaches a byte's top bit exactly when it is at least `a`, adding
     /// `0x7f - b` exactly when it is above `b`, and neither carries into the
     /// next byte.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _inRange(uint256 low, uint256 a, uint256 b) private pure returns (uint256) {
         return (low + (0x80 - a) * LANES_01) & ~(low + (0x7f - b) * LANES_01);
     }
@@ -1120,14 +1120,14 @@ library LibString {
     /// @dev `0x80` in each byte of `z` that is zero, and zero in every other
     /// byte: the low seven bits of a byte plus `0x7f` carry into its top bit
     /// unless they are all clear, and never into the next byte.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _zeroBytes(uint256 z) private pure returns (uint256) {
         return ~(((z & LANES_7F) + LANES_7F) | z | LANES_7F);
     }
 
     /// @dev Nonzero when a byte of `w` is one `escapeHTML` replaces. `&` and
     /// `'` differ in the low bit, `<` and `>` in the next one.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _htmlSpecials(uint256 w) private pure returns (uint256) {
         return _zeroBytes(w ^ (0x22 * LANES_01)) | _zeroBytes((w | LANES_01) ^ (0x27 * LANES_01))
             | _zeroBytes((w | (0x02 * LANES_01)) ^ (0x3e * LANES_01));
@@ -1136,7 +1136,7 @@ library LibString {
     /// @dev Nonzero when a byte of `w` is one `escapeJSON` escapes: `"`, `\`,
     /// or below 0x20, which neither has its top bit set nor reaches it by
     /// adding 0x60 to its low seven bits.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _jsonSpecials(uint256 w) private pure returns (uint256) {
         return _zeroBytes(w ^ (0x22 * LANES_01)) | _zeroBytes(w ^ (0x5c * LANES_01))
             | (~(((w & LANES_7F) + 0x60 * LANES_01) | w) & _HIGH_BITS);
@@ -1310,7 +1310,7 @@ library LibString {
 
     /// @dev The leading `n` bytes of `word`, whose other bytes are zero, as a
     /// string: the word written whole, then the length cut to them.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _shortString(uint256 word, uint256 n) private pure returns (string memory) {
         bytes memory out = abi.encodePacked(bytes32(word));
         _setLength(out, n);
@@ -1426,7 +1426,7 @@ library LibString {
     /// its last word, so the bytes past the new end read as zero padding.
     /// Solidity cannot spell a shorter length for an existing buffer.
     /// @custom:solar-trusted
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _truncate(bytes memory b, uint256 n) private pure {
         if (n > b.length) n = new uint256[](0)[0];
         /// @solidity memory-safe-assembly
@@ -1439,7 +1439,7 @@ library LibString {
     /// @dev Shrinks `b` to its first `n` bytes in place. The caller has cleared the
     /// bytes past `n` in its last word, so they read as zero padding.
     /// @custom:solar-trusted
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _setLength(bytes memory b, uint256 n) private pure {
         if (n > b.length) n = new uint256[](0)[0];
         /// @solidity memory-safe-assembly
@@ -1452,7 +1452,7 @@ library LibString {
     /// legacy solc's `new bytes(n)` leaves dirty. `b` must be the last allocation, so that the
     /// rest of that word is free memory.
     /// @custom:solar-trusted
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _zeroPad(bytes memory b) private pure {
         /// @solidity memory-safe-assembly
         assembly {
@@ -1473,7 +1473,7 @@ library LibString {
     }
 
     /// @dev The 16 bytes of `b` at `offset`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _readBytes16(bytes memory b, uint256 offset) private pure returns (bytes16 result) {
         for (uint256 k; k < 16; ++k) {
             result |= bytes16(b[offset + k]) >> (8 * k);
@@ -1481,7 +1481,7 @@ library LibString {
     }
 
     /// @dev The 32 bytes of `b` at `offset`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _readBytes32(bytes memory b, uint256 offset) private pure returns (bytes32 result) {
         for (uint256 k; k < 32; ++k) {
             result |= bytes32(b[offset + k]) >> (8 * k);
@@ -1489,7 +1489,7 @@ library LibString {
     }
 
     /// @dev Writes `value` into `b` at `offset`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _writeBytes32(bytes memory b, uint256 offset, bytes32 value) private pure {
         for (uint256 k; k < 32; ++k) {
             b[offset + k] = value[k];
@@ -1497,7 +1497,7 @@ library LibString {
     }
 
     /// @dev The leading `count` bytes of `b` from `offset`, at most a word, left-aligned.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _readBytesN(bytes memory b, uint256 offset, uint256 count)
         private
         pure

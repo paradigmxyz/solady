@@ -652,13 +652,13 @@ abstract contract ERC1155 {
     }
 
     /// @dev The balance slot of `owner` for `id`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _erc1155BalanceSlot(address owner, uint256 id) private pure returns (uint256) {
         return uint256(keccak256(abi.encode(id, _erc1155OwnerSlotSeed(owner))));
     }
 
     /// @dev The `operator` approval slot of `owner`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _erc1155OperatorApprovalSlot(address owner, address operator)
         private
         pure

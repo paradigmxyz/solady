@@ -1243,7 +1243,7 @@ library DynamicBufferLib {
     }
 
     /// @dev Appends the leading `n` bytes of `word` to `buffer`, for `n` at most 32.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _pWord(DynamicBuffer memory buffer, bytes32 word, uint256 n)
         private
         pure

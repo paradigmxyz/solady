@@ -295,7 +295,7 @@ library LibZip {
 
     /// @dev FastLZ's 13-bit hash of the three bytes `seq`, read with the first in the lowest
     /// byte.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _hash(uint256 seq) private pure returns (uint256) {
         uint256 v = (seq >> 16) | (seq & 0xff00) | ((seq & 0xff) << 16);
         return ((v * 2654435769) >> 19) & 0x1fff;
@@ -304,7 +304,7 @@ library LibZip {
     /// @dev Writes `l` bytes that repeat the `s` bytes of `out` from `from`, fewer than `l`
     /// and 32, at `o`: a word of whole repeats at every multiple of the repeat in it. The bytes
     /// past them in the last word are left for the next step to replace.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _repeat(bytes memory out, uint256 o, uint256 from, uint256 s, uint256 l) private pure {
         uint256 shift = 256 - (s << 3);
         uint256 p = (uint256(_readBytes32(out, from)) >> shift) << shift;
@@ -367,7 +367,7 @@ library LibZip {
     }
 
     /// @dev Stores the offset `v` for the hash `h` in `htab` and returns the offset it held.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _swapHash(uint256[] memory htab, uint256 h, uint256 v, uint256 format)
         private
         pure
@@ -431,7 +431,7 @@ library LibZip {
     /// @dev Writes a match of length field `l` at distance `d` to `out` at `op`, and returns
     /// the offset after it. Each token is written with the rest of its word, which later writes
     /// replace.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _match(bytes memory out, uint256 op, uint256 l, uint256 d)
         private
         pure
@@ -501,19 +501,19 @@ library LibZip {
     }
 
     /// @dev `0x80` in each byte of `x` that is zero, zero in every other byte.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _zeroBytes(uint256 x) private pure returns (uint256) {
         return ~((((x & _LOW_BITS) + _LOW_BITS) | x) | _LOW_BITS);
     }
 
     /// @dev `0x80` in each byte of `x` that is not zero, zero in every other byte.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _nonzeroBytes(uint256 x) private pure returns (uint256) {
         return (((x & _LOW_BITS) + _LOW_BITS) | x) & ~_LOW_BITS;
     }
 
     /// @dev `0x80` in each byte of `x` that is `0x00` or `0xff`, zero in every other byte.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _specials(uint256 x) private pure returns (uint256) {
         return ~(((((x & _LOW_BITS) + _LOW_BITS) | x) & (((~x & _LOW_BITS) + _LOW_BITS) | ~x))
                 | _LOW_BITS);
@@ -546,7 +546,7 @@ library LibZip {
     }
 
     /// @dev The 32 bytes of `b` at `offset`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _readBytes32(bytes memory b, uint256 offset) private pure returns (bytes32 result) {
         for (uint256 k; k < 32; ++k) {
             result |= bytes32(b[offset + k]) >> (k << 3);
@@ -554,7 +554,7 @@ library LibZip {
     }
 
     /// @dev Writes `value` into `b` at `offset`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _writeBytes32(bytes memory b, uint256 offset, bytes32 value) private pure {
         for (uint256 k; k < 32; ++k) {
             b[offset + k] = value[k];
@@ -562,7 +562,7 @@ library LibZip {
     }
 
     /// @dev The 4 bytes of `b` at `offset`, followed by zeros.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _readBytes4(bytes memory b, uint256 offset) private pure returns (bytes32 result) {
         for (uint256 k; k < 4; ++k) {
             result |= bytes32(b[offset + k]) >> (k << 3);
@@ -570,7 +570,7 @@ library LibZip {
     }
 
     /// @dev Writes the first 4 bytes of `value` into `b` at `offset`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _writeBytes4(bytes memory b, uint256 offset, bytes32 value) private pure {
         for (uint256 k; k < 4; ++k) {
             b[offset + k] = value[k];
@@ -578,7 +578,7 @@ library LibZip {
     }
 
     /// @dev Copies the first `n` bytes of `src` to `dst` at `dstOffset`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _copyCalldata(bytes memory dst, uint256 dstOffset, bytes calldata src, uint256 n)
         private
         pure

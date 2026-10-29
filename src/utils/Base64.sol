@@ -238,7 +238,7 @@ library Base64 {
 
     /// @dev The thirty-two characters of the twenty-four bytes packed into the
     /// low bits of `packed`, in the URL-safe alphabet if `fileSafe`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _encodeWord(uint256 packed, bool fileSafe) private pure returns (uint256) {
         // Spread the eight groups of three bytes one to a four-byte lane,
         // halving the packing each step, then each lane's twenty-four bits
@@ -264,7 +264,7 @@ library Base64 {
 
     /// @dev The first `used` characters of `chars`, then padding up to `total`
     /// characters, then zeros.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _padded(uint256 chars, uint256 used, uint256 total) private pure returns (uint256) {
         uint256 w = (chars & ~(type(uint256).max >> (used << 3))) | (PADDING >> (used << 3));
         return w & ~(type(uint256).max >> (total << 3));
@@ -272,7 +272,7 @@ library Base64 {
 
     /// @dev The twenty-four bytes thirty-two characters encode, left-aligned,
     /// and a nonzero `bad` when a character is not Base64.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _decodeWord(uint256 w) private pure returns (uint256 packed, uint256 bad) {
         // A byte with its top bit set is not ASCII; the rest is classified by
         // its low seven bits. Adding a threshold's distance to 128 carries into
@@ -319,7 +319,7 @@ library Base64 {
     }
 
     /// @dev The 24 bytes of `b` at `offset`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _readBytes24(bytes memory b, uint256 offset) private pure returns (bytes24 result) {
         for (uint256 k; k < 24; ++k) {
             result |= bytes24(b[offset + k]) >> (8 * k);
@@ -327,7 +327,7 @@ library Base64 {
     }
 
     /// @dev The 32 bytes of `b` at `offset`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _readBytes32(bytes memory b, uint256 offset) private pure returns (bytes32 result) {
         for (uint256 k; k < 32; ++k) {
             result |= bytes32(b[offset + k]) >> (8 * k);
@@ -335,7 +335,7 @@ library Base64 {
     }
 
     /// @dev The leading `count` bytes of `b` from `offset`, at most a word, left-aligned.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _readBytesN(bytes memory b, uint256 offset, uint256 count)
         private
         pure
@@ -347,7 +347,7 @@ library Base64 {
     }
 
     /// @dev Writes `value` to the 32 bytes of `b` at `offset`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _writeBytes32(bytes memory b, uint256 offset, bytes32 value) private pure {
         for (uint256 k; k < 32; ++k) {
             b[offset + k] = value[k];
@@ -355,7 +355,7 @@ library Base64 {
     }
 
     /// @dev Writes the leading `count` bytes of `value`, at most a word, to `b` at `offset`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _writeBytesN(bytes memory b, uint256 offset, bytes32 value, uint256 count)
         private
         pure
@@ -366,14 +366,14 @@ library Base64 {
     }
 
     /// @dev Decodes a single ABI bytes value. `n <= 32` and `word` is zero after `n` bytes.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _fromWord(uint256 word, uint256 n) private pure returns (bytes memory) {
         return abi.decode(abi.encode(uint256(32), n, word), (bytes));
     }
 
     /// @dev Reserves and zeroes whole words before setting the logical length.
     /// Legacy solc's `new bytes(n)` alone may leave dirty bytes after the last element.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _newBytes(uint256 n) private pure returns (bytes memory) {
         // Keep the allocator's resource panic instead of overflowing the rounding addition.
         if (n > type(uint64).max) return new bytes(n);

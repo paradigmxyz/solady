@@ -239,7 +239,7 @@ library Base58 {
 
     /// @dev The characters of the Base58 digits in the bytes of `d`: past `1` to `9`, the
     /// alphabet skips ahead 7 at digit 9, 1 at 17 and at 22, 6 at 33 and 1 at 44.
-    /// @custom:solar-noinline
+    /// @custom:solar-inline never
     function _encodeChars(uint256 d) private pure returns (uint256) {
         return d + 49 * _ONES + 7 * _atLeast(d, 9) + _atLeast(d, 17) + _atLeast(d, 22) + 6
             * _atLeast(d, 33) + _atLeast(d, 44);
@@ -251,7 +251,7 @@ library Base58 {
     /// characters lie between alternate thresholds. A digit is the byte less how far the
     /// alphabet has skipped ahead, taken from the byte with its top bit set, so that no byte
     /// borrows from the next.
-    /// @custom:solar-noinline
+    /// @custom:solar-inline never
     function _decodeChars(uint256 w) private pure returns (uint256 digits, uint256 bad) {
         uint256 x = w & _LOWS;
         // The thresholds 49, 58, 65, 73, 74, 79, 80, 91, 97, 108, 109 and 123.
@@ -266,7 +266,7 @@ library Base58 {
 
     /// @dev One in each byte of `x`, every byte below 128, that is at least `t`, at most 128:
     /// the byte plus `t`'s distance to 128 carries into its top bit, and out of no byte.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _atLeast(uint256 x, uint256 t) private pure returns (uint256) {
         return ((x + (128 - t) * _ONES) & _HIGHS) >> 7;
     }
@@ -322,13 +322,13 @@ library Base58 {
 
     /// @dev A new buffer of `n` zero bytes, with zero padding from an ABI round trip.
     /// Legacy solc's `new bytes(n)` alone may leave dirty bytes after the last element.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _newBytes(uint256 n) private pure returns (bytes memory b) {
         b = abi.decode(abi.encode(new bytes(n)), (bytes));
     }
 
     /// @dev The 32 bytes of `b` at `offset`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _readBytes32(bytes memory b, uint256 offset) private pure returns (bytes32 result) {
         for (uint256 k; k < 32; ++k) {
             result |= bytes32(b[offset + k]) >> (8 * k);
@@ -336,7 +336,7 @@ library Base58 {
     }
 
     /// @dev The leading `count` bytes of `b` from `offset`, at most a word, left-aligned.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _readBytesN(bytes memory b, uint256 offset, uint256 count)
         private
         pure
@@ -348,7 +348,7 @@ library Base58 {
     }
 
     /// @dev Writes `value` to the 32 bytes of `b` at `offset`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _writeBytes32(bytes memory b, uint256 offset, bytes32 value) private pure {
         for (uint256 k; k < 32; ++k) {
             b[offset + k] = value[k];
@@ -356,7 +356,7 @@ library Base58 {
     }
 
     /// @dev Writes the leading `count` bytes of `value`, at most a word, to `b` at `offset`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _writeBytesN(bytes memory b, uint256 offset, bytes32 value, uint256 count)
         private
         pure

@@ -139,7 +139,7 @@ library MerkleTreeLib {
 
     /// @dev Returns proof and corresponding flags for multiple leaves.
     /// The `leafIndices` must be non-empty and sorted in strictly ascending order.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function multiProofForLeaves(bytes32[] memory tree, uint256[] memory leafIndices)
         internal
         pure
@@ -238,7 +238,7 @@ library MerkleTreeLib {
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
 
     /// @dev The hash of `a` and `b`, the smaller first.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _hashPair(bytes32 a, bytes32 b) private pure returns (bytes32) {
         return b < a ? keccak256(abi.encode(b, a)) : keccak256(abi.encode(a, b));
     }

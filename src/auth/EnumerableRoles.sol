@@ -245,7 +245,7 @@ abstract contract EnumerableRoles {
     }
 
     /// @dev The 32 bytes of `b` at `offset`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _enumerableRolesReadBytes32(bytes memory b, uint256 offset)
         private
         pure

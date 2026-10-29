@@ -112,7 +112,7 @@ abstract contract ERC6551 is UUPSUpgradeable, Receiver, ERC1271 {
     }
 
     /// @dev Returns the owner of the contract.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function owner() public view virtual returns (address result) {
         uint256 cachedChainId = _cachedChainId;
         (uint256 chainId, uint256 tokenContract, uint256 tokenId) = _erc6551Footer();
@@ -125,7 +125,7 @@ abstract contract ERC6551 is UUPSUpgradeable, Receiver, ERC1271 {
 
     /// @dev Returns if `signer` is an authorized signer.
     /// `extraData` can be anything (e.g. an address, a pointer to a struct / string in memory).
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _isValidSigner(address signer, bytes32 extraData, bytes calldata context)
         internal
         view
@@ -175,7 +175,7 @@ abstract contract ERC6551 is UUPSUpgradeable, Receiver, ERC1271 {
 
     /// @dev Mutates the state. This function is required to be called in every
     /// public / external function that may modify storage or emit events.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _updateState() internal virtual {
         uint256 s = _ERC6551_STATE_SLOT;
         _erc6551Sstore(s, uint256(keccak256(abi.encode(_erc6551Sload(s), msg.data))));
@@ -259,7 +259,7 @@ abstract contract ERC6551 is UUPSUpgradeable, Receiver, ERC1271 {
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
 
     /// @dev Returns whether there is an ownership cycle.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _hasOwnershipCycle() internal view virtual returns (bool result) {
         uint256 cachedChainId = _cachedChainId;
         (uint256 chainId, uint256 tokenContract, uint256 tokenId) = _erc6551Footer();
@@ -361,7 +361,7 @@ abstract contract ERC6551 is UUPSUpgradeable, Receiver, ERC1271 {
 
     /// @dev Calls `target` with `data` and `value`, and returns its return data.
     /// Reverts and bubbles up error if the call fails.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _erc6551Call(address target, uint256 value, bytes calldata data)
         private
         returns (bytes memory result)
@@ -387,7 +387,7 @@ abstract contract ERC6551 is UUPSUpgradeable, Receiver, ERC1271 {
 
     /// @dev The word of calldata at `offset`, zero-padded past the end of the calldata, as
     /// `CALLDATALOAD` reads it.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _erc6551CalldataWord(uint256 offset) private pure returns (bytes32) {
         return bytes32(_erc6551CalldataSlice(offset, 0x20));
     }
@@ -395,7 +395,7 @@ abstract contract ERC6551 is UUPSUpgradeable, Receiver, ERC1271 {
     /// @dev `a + b` modulo `2**256`, as the assembly adds calldata offsets. Solidity's
     /// addition reverts where this wraps around.
     /// @custom:solar-trusted
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _erc6551Add(uint256 a, uint256 b) private pure returns (uint256 c) {
         unchecked {
             c = a + b;
@@ -491,7 +491,7 @@ abstract contract ERC6551 is UUPSUpgradeable, Receiver, ERC1271 {
 
     /// @dev The calldata offset of `calls`. Solidity cannot read a calldata array's offset.
     /// @custom:solar-trusted
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _erc6551CalldataOffset(Call[] calldata calls) private pure returns (uint256 offset) {
         /// @solidity memory-safe-assembly
         assembly {
@@ -502,7 +502,7 @@ abstract contract ERC6551 is UUPSUpgradeable, Receiver, ERC1271 {
     /// @dev The calldata slice of `length` bytes at `offset`, which may lie past the end of
     /// the calldata, where reads give zeros. Solidity slices only within `msg.data`.
     /// @custom:solar-trusted
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _erc6551CalldataSlice(uint256 offset, uint256 length)
         private
         pure

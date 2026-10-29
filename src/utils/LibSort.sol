@@ -620,7 +620,7 @@ library LibSort {
     }
 
     /// @dev Exchanges the keys and the values at `i` and `j`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _swap(uint256[] memory keys, uint256[] memory values, uint256 i, uint256 j)
         private
         pure
@@ -633,7 +633,7 @@ library LibSort {
     /// open-addressed table of indices at least twice as long as `a`. The loop
     /// tests its index against the length it reads again, as the table's stores
     /// could reach it, so that one test covers the element's bounds check.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _hasDuplicate(uint256[] memory a) private pure returns (bool) {
         uint256 n = a.length;
         if (n < 2) return false;
@@ -662,7 +662,7 @@ library LibSort {
     }
 
     /// @dev Copies `a[from:]` into `c` at `at`, and returns the index past it.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _copyTail(uint256[] memory c, uint256 at, uint256[] memory a, uint256 from)
         private
         pure
@@ -959,7 +959,7 @@ library LibSort {
     }
 
     /// @dev Exchanges the keys and the values at `i` and `j`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _swap(int256[] memory keys, uint256[] memory values, uint256 i, uint256 j)
         private
         pure
@@ -972,7 +972,7 @@ library LibSort {
     /// open-addressed table of indices at least twice as long as `a`. The loop
     /// tests its index against the length it reads again, as the table's stores
     /// could reach it, so that one test covers the element's bounds check.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _hasDuplicate(int256[] memory a) private pure returns (bool) {
         uint256 n = a.length;
         if (n < 2) return false;
@@ -1002,7 +1002,7 @@ library LibSort {
     }
 
     /// @dev Copies `a[from:]` into `c` at `at`, and returns the index past it.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _copyTail(int256[] memory c, uint256 at, int256[] memory a, uint256 from)
         private
         pure
@@ -1293,7 +1293,7 @@ library LibSort {
     }
 
     /// @dev Exchanges the keys and the values at `i` and `j`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _swap(address[] memory keys, uint256[] memory values, uint256 i, uint256 j)
         private
         pure
@@ -1584,7 +1584,7 @@ library LibSort {
     }
 
     /// @dev Exchanges the keys and the values at `i` and `j`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _swap(bytes32[] memory keys, uint256[] memory values, uint256 i, uint256 j)
         private
         pure
@@ -1597,7 +1597,7 @@ library LibSort {
     /// open-addressed table of indices at least twice as long as `a`. The loop
     /// tests its index against the length it reads again, as the table's stores
     /// could reach it, so that one test covers the element's bounds check.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _hasDuplicate(bytes32[] memory a) private pure returns (bool) {
         uint256 n = a.length;
         if (n < 2) return false;
@@ -1626,7 +1626,7 @@ library LibSort {
     }
 
     /// @dev Copies `a[from:]` into `c` at `at`, and returns the index past it.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _copyTail(bytes32[] memory c, uint256 at, bytes32[] memory a, uint256 from)
         private
         pure

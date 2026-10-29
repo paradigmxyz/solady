@@ -76,7 +76,7 @@ abstract contract ERC1271 is EIP712 {
 
     /// @dev Returns whether the `hash` and `signature` are valid.
     /// Override if you need non-ECDSA logic.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _erc1271IsValidSignatureNowCalldata(bytes32 hash, bytes calldata signature)
         internal
         view
@@ -87,7 +87,7 @@ abstract contract ERC1271 is EIP712 {
     }
 
     /// @dev Unwraps and returns the signature.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _erc1271UnwrapSignature(bytes calldata signature)
         internal
         view
@@ -342,7 +342,7 @@ abstract contract ERC1271 is EIP712 {
 
     /// @dev The `typedDataSignTypehash` for `contentsDescription`, and whether its
     /// `contentsName` is invalid.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _erc1271TypedDataSignTypehash(bytes calldata contentsDescription)
         private
         pure
@@ -385,7 +385,7 @@ abstract contract ERC1271 is EIP712 {
     /// is invalid: it starts with `[a-z(]`, or has a byte in ", )\x00" before that '('.
     /// It skips, a word at a time, the bytes before the first one below `0x2d`, which neither
     /// '(' nor a banned byte is, then reads the rest a byte at a time.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _erc1271ScanContentsName(bytes calldata contentsName)
         private
         pure
@@ -428,7 +428,7 @@ abstract contract ERC1271 is EIP712 {
 
     /// @dev The word of calldata at `offset`, zero-padded past the end of the calldata, as
     /// `CALLDATALOAD` reads it.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _erc1271CalldataWord(uint256 offset) private pure returns (bytes32) {
         return bytes32(_erc1271CalldataSlice(offset, 0x20));
     }
@@ -436,7 +436,7 @@ abstract contract ERC1271 is EIP712 {
     /// @dev `a + b` modulo `2**256`, as the assembly adds calldata offsets. Solidity's
     /// addition reverts where this wraps around.
     /// @custom:solar-trusted
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _erc1271Add(uint256 a, uint256 b) private pure returns (uint256 c) {
         unchecked {
             c = a + b;
@@ -445,7 +445,7 @@ abstract contract ERC1271 is EIP712 {
 
     /// @dev The calldata offset of `s`. Solidity cannot read a calldata slice's offset.
     /// @custom:solar-trusted
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _erc1271CalldataOffset(bytes calldata s) private pure returns (uint256 offset) {
         /// @solidity memory-safe-assembly
         assembly {
@@ -456,7 +456,7 @@ abstract contract ERC1271 is EIP712 {
     /// @dev The calldata slice of `length` bytes at `offset`, which may lie past the end of
     /// the calldata, where reads give zeros. Solidity slices only within `msg.data`.
     /// @custom:solar-trusted
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _erc1271CalldataSlice(uint256 offset, uint256 length)
         private
         pure

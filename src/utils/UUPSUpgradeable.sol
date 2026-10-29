@@ -126,7 +126,7 @@ abstract contract UUPSUpgradeable is CallContextChecker {
     /// the first word of the answer, read through the scratch space; past the size, the word
     /// holds what the scratch space held.
     /// @custom:solar-trusted
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _uupsUpgradeableStaticCallWord(address target, bytes memory payload)
         private
         view

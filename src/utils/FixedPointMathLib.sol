@@ -428,7 +428,7 @@ library FixedPointMathLib {
     /// @dev Calculates `floor(x * y / d)` with full precision.
     /// Behavior is undefined if `d` is zero or the final result cannot fit in 256 bits.
     /// Performs the full 512 bit calculation regardless.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function fullMulDivUnchecked(uint256 x, uint256 y, uint256 d)
         internal
         pure
@@ -608,7 +608,7 @@ library FixedPointMathLib {
     }
 
     /// @dev Returns the square root of `x`, rounded down.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function sqrt(uint256 x) internal pure returns (uint256 z) {
         // `floor(sqrt(2**15)) = 181`. `sqrt(2**15) - 181 = 2.84`.
         z = 181; // The "correct" value is 1, but this saves a multiplication later.
@@ -665,7 +665,7 @@ library FixedPointMathLib {
     /// https://github.com/pcaversaccio/snekmate/blob/main/src/snekmate/utils/math.vy
     /// Formally verified by xuwinnie:
     /// https://github.com/vectorized/solady/blob/main/audits/xuwinnie-solady-cbrt-proof.pdf
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function cbrt(uint256 x) internal pure returns (uint256 z) {
         uint256 r = _msbByte(x);
         // Makeshift lookup table to nudge the approximate log2 result.
@@ -1066,7 +1066,7 @@ library FixedPointMathLib {
 
     /// @dev Returns the bit position, a multiple of 8, of the byte of `x` that
     /// holds its highest set bit, or 0 if `x` is zero.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _msbByte(uint256 x) private pure returns (uint256 r) {
         r = x > type(uint128).max ? 128 : 0;
         r |= (x >> r) > type(uint64).max ? 64 : 0;

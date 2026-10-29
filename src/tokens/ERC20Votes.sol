@@ -367,7 +367,7 @@ abstract contract ERC20Votes is ERC20 {
     /// @dev The value of the checkpoint at `index`, whose word is `packed`: its top
     /// 160 bits, unless they are this contract's address, which stands for the value kept
     /// whole at the complemented index.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _erc20VotesCheckpointValue(uint256 index, uint256 packed)
         private
         view

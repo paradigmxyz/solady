@@ -392,7 +392,7 @@ library SignatureCheckerLib {
     }
 
     /// @dev The 32 bytes of `b` at `offset`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _readBytes32(bytes memory b, uint256 offset) private pure returns (bytes32 result) {
         for (uint256 k; k < 32; ++k) {
             result |= bytes32(b[offset + k]) >> (8 * k);
@@ -400,7 +400,7 @@ library SignatureCheckerLib {
     }
 
     /// @dev Writes `value` into `b` at `offset`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _writeBytes4(bytes memory b, uint256 offset, bytes4 value) private pure {
         for (uint256 k; k < 4; ++k) {
             b[offset + k] = value[k];
@@ -408,7 +408,7 @@ library SignatureCheckerLib {
     }
 
     /// @dev Writes `value` into `b` at `offset`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _writeBytes32(bytes memory b, uint256 offset, bytes32 value) private pure {
         for (uint256 k; k < 32; ++k) {
             b[offset + k] = value[k];
@@ -417,7 +417,7 @@ library SignatureCheckerLib {
 
     /// @dev Copies `count` bytes from `src` at `srcOffset` to `dst` at
     /// `dstOffset`, front to back.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _copy(
         bytes memory dst,
         uint256 dstOffset,

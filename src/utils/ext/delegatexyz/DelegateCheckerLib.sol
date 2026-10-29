@@ -263,7 +263,7 @@ library DelegateCheckerLib {
     /// @dev Whether a static call to `registry` with the first `length` bytes of `data`
     /// succeeds and returns a first word of 1. A word of fewer than 32 returned bytes ends in a
     /// zero byte, so it is not 1.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _isOne(address registry, bytes memory data, uint256 length)
         private
         view
@@ -275,14 +275,14 @@ library DelegateCheckerLib {
 
     /// @dev The first word that a static call to `registry` with `data` returns, with any bytes
     /// it does not return read as zeros, or zero if the call fails.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _word(address registry, bytes memory data) private view returns (uint256) {
         (bool success, bytes32 word) = _staticCallWord(registry, gasleft(), data, data.length);
         return success ? uint256(word) : 0;
     }
 
     /// @dev Sets the function selector of `data` to `s`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _setSelector(bytes memory data, bytes4 s) private pure {
         for (uint256 k; k < 4; ++k) {
             data[k] = s[k];
@@ -293,7 +293,7 @@ library DelegateCheckerLib {
     /// gas, and returns the first word of the returndata, right padded with zeros, which is all
     /// of it that is copied. Solidity sends a whole buffer and copies the whole returndata.
     /// @custom:solar-trusted
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _staticCallWord(address target, uint256 gasLimit, bytes memory payload, uint256 length)
         private
         view

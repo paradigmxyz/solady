@@ -222,7 +222,7 @@ contract ERC7821 is Receiver {
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
 
     /// @dev The word at `offset` in `b`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _erc7821Load(bytes calldata b, uint256 offset) private pure returns (uint256) {
         return uint256(bytes32(b[offset:offset + 0x20]));
     }

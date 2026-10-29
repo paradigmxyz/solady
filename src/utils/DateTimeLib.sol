@@ -72,7 +72,7 @@ library DateTimeLib {
     /// See: https://howardhinnant.github.io/date_algorithms.html
     /// Note: Inputs outside the supported ranges result in undefined behavior.
     /// Use {isSupportedDate} to check if the inputs are supported.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function dateToEpochDay(uint256 year, uint256 month, uint256 day)
         internal
         pure
@@ -88,7 +88,7 @@ library DateTimeLib {
     /// @dev Returns (`year`,`month`,`day`) from the number of days since 1970-01-01.
     /// Note: Inputs outside the supported ranges result in undefined behavior.
     /// Use {isSupportedDays} to check if the inputs is supported.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function epochDayToDate(uint256 epochDay)
         internal
         pure
@@ -113,7 +113,7 @@ library DateTimeLib {
     /// @dev Returns the unix timestamp from (`year`,`month`,`day`).
     /// Note: Inputs outside the supported ranges result in undefined behavior.
     /// Use {isSupportedDate} to check if the inputs are supported.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function dateToTimestamp(uint256 year, uint256 month, uint256 day)
         internal
         pure
@@ -125,7 +125,7 @@ library DateTimeLib {
     /// @dev Returns (`year`,`month`,`day`) from the given unix timestamp.
     /// Note: Inputs outside the supported ranges result in undefined behavior.
     /// Use {isSupportedTimestamp} to check if the inputs are supported.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function timestampToDate(uint256 timestamp)
         internal
         pure
@@ -159,7 +159,7 @@ library DateTimeLib {
     /// from the given unix timestamp.
     /// Note: Inputs outside the supported ranges result in undefined behavior.
     /// Use {isSupportedTimestamp} to check if the inputs are supported.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function timestampToDateTime(uint256 timestamp)
         internal
         pure
@@ -181,13 +181,13 @@ library DateTimeLib {
     }
 
     /// @dev Returns if the `year` is leap.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function isLeapYear(uint256 year) internal pure returns (bool leap) {
         leap = year & (year % 25 == 0 ? 15 : 3) == 0;
     }
 
     /// @dev Returns number of days in given `month` of `year`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function daysInMonth(uint256 year, uint256 month) internal pure returns (uint256 result) {
         bool flag = isLeapYear(year);
         // `daysInMonths = [31,28,31,30,31,30,31,31,30,31,30,31]`.
@@ -252,7 +252,7 @@ library DateTimeLib {
     /// Example: 3rd Friday of Feb 2022 is `nthWeekdayInMonthOfYearTimestamp(2022, 2, 3, 5)`
     /// Note: `n` is 1-indexed for traditional consistency.
     /// Invalid weekdays (i.e. `wd == 0 || wd > 7`) result in undefined behavior.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function nthWeekdayInMonthOfYearTimestamp(uint256 year, uint256 month, uint256 n, uint256 wd)
         internal
         pure
@@ -501,7 +501,7 @@ library DateTimeLib {
     }
 
     /// @dev Returns the offsetted timestamp.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _offsetted(uint256 year, uint256 month, uint256 day, uint256 timestamp)
         private
         pure

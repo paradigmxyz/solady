@@ -651,20 +651,20 @@ abstract contract ERC721 {
 
     /// @dev The ownership data slot of `id`: the hash of `id` with its last four bytes
     /// replaced by the seed's first four, plus twice `id`, wrapping.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _erc721OwnershipSlot(uint256 id) private pure returns (uint256) {
         bytes32 h = keccak256(abi.encode((id >> 32 << 32) | (_ERC721_MASTER_SLOT_SEED >> 224)));
         return _erc721Add(uint256(h), id << 1);
     }
 
     /// @dev The balance slot of `owner`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _erc721BalanceSlot(address owner) private pure returns (uint256) {
         return uint256(keccak256(abi.encodePacked(owner, uint64(_ERC721_MASTER_SLOT_SEED_MASKED))));
     }
 
     /// @dev The `operator` approval slot of `owner`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _erc721OperatorApprovalSlot(address owner, address operator)
         private
         pure

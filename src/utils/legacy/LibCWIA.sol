@@ -225,7 +225,7 @@ library LibCWIA {
 
     /// @dev The creation code of the clone of `implementation` with the immutable arguments
     /// `data`, 0x6e bytes longer than `data`, laid out in the table of `clone`.
-    /// @custom:solar-inline
+    /// @custom:solar-inline always
     function _creationCode(address implementation, bytes memory data)
         private
         pure
