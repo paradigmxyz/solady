@@ -312,8 +312,9 @@ library WebAuthn {
         // start of `encoded`, the last ends with the closing quote.
         bytes32 first = bytes32('"challenge":"') | (_readBytes32(encoded, 0) >> 104);
         if (_readBytes32(clientDataJSON, c) != first) return false;
-        for (uint256 k = 0x20; k + 0x20 <= q; k += 0x20) {
-            if (_readBytes32(clientDataJSON, c + k) != _readBytes32(encoded, k - 13)) return false;
+        // The first word already compared nineteen bytes of the challenge.
+        for (uint256 k = 19; k + 0x20 <= l; k += 0x20) {
+            if (_readBytes32(clientDataJSON, c + 13 + k) != _readBytes32(encoded, k)) return false;
         }
         bytes32 last = (_readBytes32(encoded, l - 0x20) << 8) | bytes32(uint256(0x22));
         return _readBytes32(clientDataJSON, end - 31) == last;

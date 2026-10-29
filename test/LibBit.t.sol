@@ -388,4 +388,39 @@ contract LibBitTest is SoladyTest {
             }
         }
     }
+
+    function testToNibblesRetainsOwnedPadding() public {
+        uint256[8] memory lengths = [uint256(1), 15, 16, 17, 31, 32, 33, 65];
+        for (uint256 k; k < lengths.length; ++k) {
+            bytes memory input = new bytes(lengths[k]);
+            for (uint256 i; i < input.length; ++i) {
+                input[i] = bytes1(uint8(i * 37 + 251));
+            }
+            bytes memory expected = _toNibblesOriginal(input);
+            _brutalizeMemory();
+            _misalignFreeMemoryPointer();
+            bytes memory first = LibBit.toNibbles(input);
+            _checkMemory(first);
+            bytes memory next = LibBit.toNibbles(hex"012345");
+            _checkMemory(next);
+            assertEq(first, expected);
+            assertEq(next, hex"000102030405");
+            _checkMemory(first);
+        }
+    }
+
+    function testToNibblesOversizedLengthReverts() public {
+        for (uint256 n = (uint256(1) << 63) - 1; n <= uint256(1) << 63; ++n) {
+            vm.expectRevert(abi.encodeWithSignature("Panic(uint256)", uint256(0x41)));
+            this.toNibblesOversized(n);
+        }
+    }
+
+    function toNibblesOversized(uint256 n) external pure returns (bytes memory) {
+        bytes memory input = new bytes(0);
+        assembly {
+            mstore(input, n)
+        }
+        return LibBit.toNibbles(input);
+    }
 }

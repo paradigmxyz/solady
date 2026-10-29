@@ -202,4 +202,34 @@ contract Base64Test is SoladyTest {
 
         assertEq(Base64.encode(input, fileSafe, noPadding), expectedEncoded);
     }
+
+    function testSmallBuffersRetainOwnedPadding() public {
+        bytes memory input = new bytes(33);
+        for (uint256 i; i < input.length; ++i) {
+            input[i] = bytes1(uint8(i * 37 + 251));
+        }
+        bytes32 inputHash = keccak256(input);
+        _brutalizeMemory();
+        _misalignFreeMemoryPointer();
+        string memory first = Base64.encode(input, true, true);
+        _checkMemory(first);
+        bytes32 firstHash = keccak256(bytes(first));
+
+        _brutalizeMemory();
+        _misalignFreeMemoryPointer();
+        string memory second = Base64.encode(input);
+        _checkMemory(second);
+        assertEq(first, _referenceEncode(input, true, true));
+        assertEq(second, _referenceEncode(input, false, false));
+
+        _brutalizeMemory();
+        _misalignFreeMemoryPointer();
+        bytes memory decoded = Base64.decode(first);
+        _checkMemory(decoded);
+        assertEq(decoded, input);
+        assertEq(keccak256(bytes(first)), firstHash);
+        assertEq(keccak256(input), inputHash);
+        _checkMemory(first);
+        _checkMemory(second);
+    }
 }

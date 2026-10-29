@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.4;
+pragma solidity ^0.8.5;
+
+import {LibBytes} from "./LibBytes.sol";
 
 /// @notice Library to encode strings in Base64.
 /// @author Solady (https://github.com/vectorized/solady/blob/main/src/utils/Base64.sol)
@@ -8,8 +10,8 @@ pragma solidity ^0.8.4;
 /// @dev The checked port works a word at a time in both directions without a lookup table: `encode`
 /// turns twenty-four bytes into thirty-two characters and `decode` thirty-two characters into
 /// twenty-four bytes with arithmetic on every byte of a word at once, the input's tail read as one
-/// shorter word. Output buffers have their final length from allocation, with bounded writes
-/// at the tail. An ABI round trip provides zero padding without changing an object's length.
+/// shorter word. Output buffers have their final length before bounded writes at the tail.
+/// Buffers reserve whole zeroed words, then keep only their logical length.
 /// An output of at most a word is decoded from an ABI tuple. `encode` writes the standard
 /// alphabet with padding, or the URL-safe one and no padding on request. `decode` accepts the
 /// documented standard, URL and IMAP
@@ -369,10 +371,12 @@ library Base64 {
         return abi.decode(abi.encode(uint256(32), n, word), (bytes));
     }
 
-    /// @dev Allocates the final length with zero padding through an ABI round trip.
+    /// @dev Reserves and zeroes whole words before setting the logical length.
     /// Legacy solc's `new bytes(n)` alone may leave dirty bytes after the last element.
     /// @custom:solar-inline
     function _newBytes(uint256 n) private pure returns (bytes memory) {
-        return abi.decode(abi.encode(new bytes(n)), (bytes));
+        // Keep the allocator's resource panic instead of overflowing the rounding addition.
+        if (n > type(uint64).max) return new bytes(n);
+        return LibBytes.truncate(new bytes((n + 31) & ~uint256(31)), n);
     }
 }

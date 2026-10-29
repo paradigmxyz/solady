@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.5;
 
+import {LibBytes} from "./LibBytes.sol";
+
 /// @notice Library for bit twiddling and boolean operations.
 /// @author Solady (https://github.com/vectorized/solady/blob/main/src/utils/LibBit.sol)
 /// @author Inspired by (https://graphics.stanford.edu/~seander/bithacks.html)
@@ -380,11 +382,12 @@ library LibBit {
         }
     }
 
-    /// @dev Allocates bytes with zero right padding, including over dirty memory.
+    /// @dev Reserves and zeroes whole words before setting the logical length.
     /// Legacy solc only zeroes the logical length of `new bytes(n)`.
     /// @custom:solar-inline
     function _newBytes(uint256 n) private pure returns (bytes memory) {
-        if (n & 31 == 0) return new bytes(n);
-        return abi.decode(abi.encode(new bytes(n)), (bytes));
+        // Keep the allocator's resource panic instead of overflowing the rounding addition.
+        if (n > type(uint64).max) return new bytes(n);
+        return LibBytes.truncate(new bytes((n + 31) & ~uint256(31)), n);
     }
 }
