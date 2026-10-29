@@ -193,6 +193,140 @@ FAIR_PATCHES = {
     },
 }
 
+# The port keeps public behavior but uses typed lists and Solidity-managed token
+# storage. The role oracle gives each set a separate mapping entry. These test
+# helpers use only public APIs in both legs: no returned recursive List, packed-list
+# offsets, hashed allowance slots, adjacent raw set slots, or mover-code probe.
+# Native port tests separately check the typed list's internal invariants.
+FAIR_COMPATIBILITY_PATCHES = {
+    "test/LibRLP.t.sol": [
+        (
+            "function testRLPMemory(bytes32) public returns (LibRLP.List memory l) {",
+            "function testRLPMemory(bytes32) public {\n        LibRLP.List memory l;",
+        ),
+        (
+            """    function _getUint256(LibRLP.List memory l, uint256 i) internal pure returns (uint256 result) {
+        /// @solidity memory-safe-assembly
+        assembly {
+            mstore(0x00, 0)
+            let head := and(mload(l), 0xffffffffff)
+            if head {
+                for { let j := 0 } iszero(eq(j, i)) { j := add(j, 1) } {
+                    head := and(mload(head), 0xffffffffff)
+                }
+                result := shr(48, mload(head))
+                if eq(1, byte(26, mload(head))) { result := mload(result) }
+            }
+        }
+    }""",
+            """    function _getUint256(LibRLP.List memory l, uint256 i) internal pure returns (uint256 result) {
+        bytes memory encoded = l.encode();
+        uint256 prefix = uint8(encoded[0]);
+        require(prefix >= 0xc0);
+        uint256 cursor = prefix <= 0xf7 ? 1 : 1 + prefix - 0xf7;
+        for (uint256 j;; ++j) {
+            prefix = uint8(encoded[cursor]);
+            uint256 length = 1;
+            if (prefix >= 0x80) {
+                require(prefix <= 0xa0);
+                length = prefix - 0x80;
+                ++cursor;
+            }
+            if (j == i) {
+                for (uint256 k; k < length; ++k) {
+                    result = (result << 8) | uint8(encoded[cursor + k]);
+                }
+                return result;
+            }
+            cursor += length;
+        }
+    }""",
+        ),
+        (
+            """    function _checkMemory(LibRLP.List memory l) internal pure {
+        /// @solidity memory-safe-assembly
+        assembly {
+            let m := mload(0x40)
+            let v := mload(l)
+            if gt(shr(40, v), m) { invalid() }
+            for { let head := and(v, 0xffffffffff) } head {} {
+                if gt(head, m) { invalid() }
+                head := and(mload(head), 0xffffffffff)
+            }
+        }
+        _checkMemory();
+    }""",
+            """    function _checkMemory(LibRLP.List memory l) internal pure {
+        // Native tests retain the private node-layout checks.
+        // testRLPMemory still checks the encoded result's memory at the end.
+        _checkMemory();
+    }""",
+        ),
+    ],
+    "test/SafeTransferLib.t.sol": [
+        (
+            """            bytes32 allowanceSlot;
+            /// @solidity memory-safe-assembly
+            assembly {
+                mstore(0x20, to)
+                mstore(0x0c, 0x7f5e9f20) // `_ALLOWANCE_SLOT_SEED`.
+                mstore(0x00, from)
+                allowanceSlot := keccak256(0x0c, 0x34)
+            }
+            vm.store(token, allowanceSlot, bytes32(uint256(amount)));""",
+            """            vm.prank(from);
+            erc20.approve(to, amount);""",
+        ),
+        (
+            """        if (SafeTransferLib.ETH_MOVER.code.length == 0) {
+            address vault = this.safeMoveETH(to, amount1);
+            assertEq(vault.balance, amount1);
+            assertEq(to.balance, amount0);
+            assertEq(address(this).balance, selfBalanceBefore - amount0 - amount1);
+        } else {
+            assertEq(this.safeMoveETH(to, amount1), address(0));
+            assertEq(to.balance, amount0 + amount1);
+            assertEq(address(this).balance, selfBalanceBefore - amount0 - amount1);
+        }""",
+            """        address vault = this.safeMoveETH(to, amount1);
+        if (vault == address(0)) {
+            assertEq(to.balance, amount0 + amount1);
+        } else {
+            assertEq(vault.balance, amount1);
+            assertEq(to.balance, amount0);
+        }
+        assertEq(address(this).balance, selfBalanceBefore - amount0 - amount1);""",
+        ),
+    ],
+    "test/EnumerableRoles.t.sol": [
+        (
+            "    MockEnumerableRoles mockEnumerableRoles;",
+            "    MockEnumerableRoles mockEnumerableRoles;\n\n"
+            "    mapping(uint256 => EnumerableSetLib.AddressSet) private _expectedRoleHolders;",
+        ),
+        (
+            """    function _roleHolders(uint256 role)
+        internal
+        pure
+        returns (EnumerableSetLib.AddressSet storage holders)
+    {
+        /// @solidity memory-safe-assembly
+        assembly {
+            holders.slot := add(role, 0x97)
+        }
+    }""",
+            """    function _roleHolders(uint256 role)
+        internal
+        view
+        returns (EnumerableSetLib.AddressSet storage holders)
+    {
+        return _expectedRoleHolders[role];
+    }""",
+        ),
+    ],
+}
+
+
 # Suites not named after the library they test.
 SUITES = {
     "RedBlackTreeLib": "test/RedBlackTree.t.sol",
@@ -285,6 +419,28 @@ def forge_test(cache, key, label, command, folder, env):
     return entry
 
 
+def apply_fair_patches(folder):
+    """Apply identical input and API-compatibility recipes to either benchmark leg."""
+    applied = []
+    for name, patches in (FAIR_PATCHES | FAIR_COMPATIBILITY_PATCHES).items():
+        path = folder / name
+        if not path.exists():
+            continue
+        text = path.read_text()
+        for old, new in patches:
+            if text.count(old) != 1:
+                raise SystemExit(f"--fair: {name} must contain exactly one {old!r}")
+            text = text.replace(old, new, 1)
+            applied.append({
+                "source": name,
+                "kind": "compatibility" if name in FAIR_COMPATIBILITY_PATCHES else "inputs",
+                "old_sha256": digest(old.encode()),
+                "new_sha256": digest(new.encode()),
+            })
+        path.write_text(text)
+    return applied
+
+
 def gas_report(results):
     """Each suite's gas, the port built by Solar against upstream built by solc, over the tests
     both pass; `test__codesize` reports a size, not gas."""
@@ -306,6 +462,8 @@ def gas_report(results):
         total[0] += test["gas"]
         total[1] += other["gas"]
         total[2] += 1
+    if not totals:
+        return "No comparable passing tests\n"
     lines = [
         "| Suite | Tests | Upstream, solc | Port, Solar | Ratio |",
         "|---|---:|---:|---:|---:|",
@@ -355,17 +513,8 @@ def run(args):
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(text)
             hashes[name] = digest(text.encode())
-        if args.fair:
-            for name, patches in FAIR_PATCHES.items():
-                path = folder / name
-                if not path.exists():
-                    continue
-                text = path.read_text()
-                for old, new in patches:
-                    if old not in text:
-                        raise SystemExit(f"--fair: {name} has no {old!r}")
-                    text = text.replace(old, new, 1)
-                path.write_text(text)
+        applied = apply_fair_patches(folder) if args.fair else []
+        hashes = {name: digest((folder / name).read_bytes()) for name in hashes}
         # Test data the suites read, such as P256's Wycheproof vectors, as the pinned
         # release has it.
         for data in sorted((ROOT / "test/data").glob("*")):
@@ -428,6 +577,7 @@ def run(args):
             "succeeded": succeeded,
             "tests": tests,
             "source_sha256": hashes,
+            "test_patches": applied,
             "command": command,
             "compiler_sha256": file_sha256(compiler),
         }

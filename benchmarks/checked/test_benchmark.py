@@ -3,7 +3,9 @@ against reusing a cached result whose inputs changed."""
 
 import contextlib
 import copy
+import gzip
 import io
+import json
 import os
 import subprocess
 import tempfile
@@ -528,6 +530,123 @@ class TraceCacheTests(unittest.TestCase):
         rebuilt = dict(identity, sha256="b")
         with mock.patch.object(benchmark, "tool_identity", return_value=rebuilt):
             self.assertNotEqual(key, benchmark.trace_environment("cancun", "0x01"))
+
+
+class FairFixtureTests(unittest.TestCase):
+    def setUp(self):
+        self.archive = json.loads(gzip.decompress(benchmark.ARCHIVE.read_bytes()))["sources"]
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.root = Path(directory.name)
+
+    def project(self, label):
+        folder = self.root / label
+        for name in upstream_tests.FAIR_COMPATIBILITY_PATCHES:
+            path = folder / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(self.archive[name]["content"])
+        path = folder / "src/utils/LibRLP.sol"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(label)
+        return folder
+
+    def test_api_compatibility_patches_are_identical_on_both_legs(self):
+        original = copy.deepcopy(self.archive)
+        upstream = self.project("upstream")
+        safe = self.project("safe")
+        before = {
+            name: (upstream / name).read_text()
+            for name in upstream_tests.FAIR_COMPATIBILITY_PATCHES
+        }
+        changes = upstream_tests.apply_fair_patches(upstream)
+        self.assertEqual(changes, upstream_tests.apply_fair_patches(safe))
+        self.assertEqual(len(changes), 7)
+        self.assertEqual({change["kind"] for change in changes}, {"compatibility"})
+        for name, text in before.items():
+            patched = (upstream / name).read_text()
+            self.assertEqual(patched, (safe / name).read_text())
+            for old, new in upstream_tests.FAIR_COMPATIBILITY_PATCHES[name]:
+                self.assertIn(new, patched)
+            expected = text
+            for old, new in upstream_tests.FAIR_COMPATIBILITY_PATCHES[name]:
+                expected = expected.replace(old, new, 1)
+            self.assertEqual(patched, expected)
+        self.assertEqual(self.archive, original)
+        self.assertEqual((upstream / "src/utils/LibRLP.sol").read_text(), "upstream")
+        self.assertEqual((safe / "src/utils/LibRLP.sol").read_text(), "safe")
+
+    def test_compatibility_helpers_keep_behavior_checks_and_test_entry_points(self):
+        folder = self.project("safe")
+        upstream_tests.apply_fair_patches(folder)
+        rlp = (folder / "test/LibRLP.t.sol").read_text()
+        transfers = (folder / "test/SafeTransferLib.t.sol").read_text()
+        roles = (folder / "test/EnumerableRoles.t.sol").read_text()
+        self.assertIn("return _expectedRoleHolders[role];", roles)
+        self.assertIn("mapping(uint256 => EnumerableSetLib.AddressSet)", roles)
+        self.assertNotIn("holders.slot := add(role, 0x97)", roles)
+        self.assertIn("function testRLPMemory(bytes32) public {", rlp)
+        self.assertIn("LibRLP.List memory l;", rlp)
+        self.assertIn("assertEq(_getUint256(l, i), y);", rlp)
+        start = rlp.index("function testRLPMemory(bytes32) public {")
+        end = rlp.index("\n    }", start)
+        self.assertEqual(rlp[start:end].count("_checkMemory(l.encode());"), 1)
+        checker = upstream_tests.FAIR_COMPATIBILITY_PATCHES["test/LibRLP.t.sol"][2][1]
+        self.assertNotIn(".encode()", checker)
+        self.assertIn("_checkMemory();", checker)
+        self.assertIn("require(prefix <= 0xa0);", rlp)
+        self.assertIn('assertEq(ERC20(token).allowance(from, to), amount, "wrong allowance");', transfers)
+        self.assertIn("assertEq(vault.balance, amount1);", transfers)
+        self.assertIn("assertEq(to.balance, amount0 + amount1);", transfers)
+        self.assertIn("assertEq(address(this).balance, selfBalanceBefore - amount0 - amount1);", transfers)
+        for name in upstream_tests.FAIR_COMPATIBILITY_PATCHES:
+            original = self.archive[name]["content"]
+            patched = (folder / name).read_text()
+            original_tests = original.count("function test")
+            self.assertEqual(patched.count("function test"), original_tests)
+
+    def test_changed_or_duplicated_fixture_fails_closed(self):
+        for mode in ("missing", "duplicate"):
+            with self.subTest(mode=mode):
+                folder = self.project(mode)
+                name = "test/LibRLP.t.sol"
+                old = upstream_tests.FAIR_COMPATIBILITY_PATCHES[name][0][0]
+                path = folder / name
+                text = path.read_text()
+                changed = text.replace(old, old.replace("public", "public ", 1), 1)
+                path.write_text(changed if mode == "missing" else text + old)
+                with self.assertRaisesRegex(SystemExit, "must contain exactly one"):
+                    upstream_tests.apply_fair_patches(folder)
+
+    def test_patch_records_identify_the_exact_source_changes(self):
+        folder = self.project("upstream")
+        records = upstream_tests.apply_fair_patches(folder)
+        expected = [
+            {
+                "source": name,
+                "kind": "compatibility",
+                "old_sha256": benchmark.digest(old.encode()),
+                "new_sha256": benchmark.digest(new.encode()),
+            }
+            for name, patches in upstream_tests.FAIR_COMPATIBILITY_PATCHES.items()
+            for old, new in patches
+        ]
+        self.assertEqual(records, expected)
+
+    def test_empty_gas_report_is_explicit(self):
+        passing = {"status": "Success", "gas": 10}
+        failed = {"status": "Failure", "gas": 10}
+        cases = [
+            ({}, {}),
+            ({"test/A.t.sol:T::testA()": passing}, {}),
+            ({"test/A.t.sol:T::testA()": passing}, {"test/A.t.sol:T::testA()": failed}),
+        ]
+        for upstream, safe in cases:
+            with self.subTest(upstream=upstream, safe=safe):
+                results = {
+                    "solc-upstream": {"tests": upstream},
+                    "solar-safe": {"tests": safe},
+                }
+                self.assertEqual(upstream_tests.gas_report(results), "No comparable passing tests\n")
 
 
 class SuiteCacheTests(unittest.TestCase):
