@@ -13,6 +13,29 @@ pragma solidity ^0.8.4;
 /// @custom:solar-safe memory arithmetic
 library BlockHashLib {
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
+    /*                          STRUCTS                           */
+    /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
+
+    /// @dev Ethereum block header fields relevant to historical MPT proofs.
+    struct ShortHeader {
+        bytes32 parentHash;
+        bytes32 stateRoot;
+        bytes32 transactionsRoot;
+        bytes32 receiptsRoot;
+        bytes32[8] logsBloom;
+    }
+
+    /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
+    /*                       CUSTOM ERRORS                        */
+    /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
+
+    /// @dev The keccak256 of the RLP-encoded block header does not equal the block hash.
+    error BlockHashMismatch();
+
+    /// @dev The block header is not properly RLP-encoded.
+    error InvalidBlockHeaderEncoding();
+
+    /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                         CONSTANTS                          */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
 
@@ -36,6 +59,37 @@ library BlockHashLib {
             : blockNumber + 256;
         if (block.number <= end) return blockhash(blockNumber);
         (,, result) = _staticCallWord(HISTORY_STORAGE_ADDRESS, gasleft(), abi.encode(blockNumber));
+    }
+
+    /// @dev Reverts if `keccak256(encodedHeader) != blockHash(blockNumber)`.
+    /// Else, returns the block hash. This checks the hash without validating the RLP encoding.
+    function verifyBlock(bytes calldata encodedHeader, uint256 blockNumber)
+        internal
+        view
+        returns (bytes32 result)
+    {
+        result = blockHash(blockNumber);
+        if (keccak256(encodedHeader) != result) revert BlockHashMismatch();
+    }
+
+    /// @dev Extracts the leading fields relevant to historical MPT proofs.
+    /// Like the original, checks only the `0xf9` list prefix and the 448-byte minimum length.
+    function toShortHeader(bytes calldata encodedHeader)
+        internal
+        pure
+        returns (ShortHeader memory result)
+    {
+        if (encodedHeader.length < 448 || encodedHeader[0] != 0xf9) {
+            revert InvalidBlockHeaderEncoding();
+        }
+        result.parentHash = bytes32(encodedHeader[4:36]);
+        result.stateRoot = bytes32(encodedHeader[91:123]);
+        result.transactionsRoot = bytes32(encodedHeader[124:156]);
+        result.receiptsRoot = bytes32(encodedHeader[157:189]);
+        for (uint256 i; i < 8; ++i) {
+            uint256 offset = 192 + i * 32;
+            result.logsBloom[i] = bytes32(encodedHeader[offset:offset + 32]);
+        }
     }
 
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/

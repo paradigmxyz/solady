@@ -3,6 +3,10 @@ pragma solidity ^0.8.4;
 
 import "./utils/SoladyTest.sol";
 import {BlockHashLib} from "../src/utils/BlockHashLib.sol";
+import {
+    BlockHashLib as GlobalBlockHashLib,
+    ShortHeader as GlobalShortHeader
+} from "../src/utils/g/BlockHashLib.sol";
 import {LibRLP} from "../src/utils/LibRLP.sol";
 
 contract BlockHashLibTest is SoladyTest {
@@ -111,6 +115,23 @@ contract BlockHashLibTest is SoladyTest {
         return BlockHashLib.verifyBlock(blockHeader, blockNumber);
     }
 
+    function testVerifyBlockMismatch() public {
+        vm.roll(23270177 + 1);
+        vm.setBlockhash(23270177, _ETH_BLOCK_HASH_23270177);
+        bytes memory altered = _ETH_BLOCK_23270177;
+        altered[0] = 0xf8;
+        vm.expectRevert(BlockHashLib.BlockHashMismatch.selector);
+        this.verifyBlock(altered, 23270177);
+    }
+
+    function testVerifyBlockChecksOnlyHash() public {
+        bytes memory encoded = hex"123456";
+        bytes32 expected = keccak256(encoded);
+        vm.roll(23270177 + 1);
+        vm.setBlockhash(23270177, expected);
+        assertEq(this.verifyBlock(encoded, 23270177), expected);
+    }
+
     function _randomBlockHeader() internal returns (BlockHeader memory b, bytes memory encoded) {
         if (_randomChance(2)) {
             b.parentHash = bytes32(_random());
@@ -177,6 +198,51 @@ contract BlockHashLibTest is SoladyTest {
         _brutalizeMemory();
         result = BlockHashLib.toShortHeader(encodedHeader);
         _checkMemory();
+    }
+
+    function testToShortHeaderDifferential(bytes memory encoded, bool listPrefix) public {
+        if (listPrefix && encoded.length != 0) encoded[0] = 0xf9;
+        _assertShortHeaderMatchesGlobal(encoded);
+    }
+
+    function testToShortHeaderBounds() public {
+        _assertShortHeaderMatchesGlobal("");
+        bytes memory encoded = new bytes(447);
+        encoded[0] = 0xf9;
+        _assertShortHeaderMatchesGlobal(encoded);
+        vm.expectRevert(BlockHashLib.InvalidBlockHeaderEncoding.selector);
+        this.toShortHeader("", encoded);
+
+        encoded = new bytes(448);
+        for (uint256 i; i < encoded.length; ++i) {
+            encoded[i] = bytes1(uint8(i));
+        }
+        encoded[0] = 0xf9;
+        // Minimal validation accepts this noncanonical header, as the original does.
+        _assertShortHeaderMatchesGlobal(encoded);
+        this.toShortHeader("", encoded);
+
+        encoded[0] = 0xf8;
+        _assertShortHeaderMatchesGlobal(encoded);
+        vm.expectRevert(BlockHashLib.InvalidBlockHeaderEncoding.selector);
+        this.toShortHeader("", encoded);
+    }
+
+    function toGlobalShortHeader(bytes calldata encoded)
+        public
+        pure
+        returns (GlobalShortHeader memory)
+    {
+        return GlobalBlockHashLib.toShortHeader(encoded);
+    }
+
+    function _assertShortHeaderMatchesGlobal(bytes memory encoded) private {
+        (bool localSuccess, bytes memory localResult) = address(this)
+            .staticcall(abi.encodeWithSelector(this.toShortHeader.selector, bytes(""), encoded));
+        (bool globalSuccess, bytes memory globalResult) = address(this)
+            .staticcall(abi.encodeWithSelector(this.toGlobalShortHeader.selector, encoded));
+        assertEq(localSuccess, globalSuccess);
+        assertEq(localResult, globalResult);
     }
 
     function testRandomBlockHeader(bytes32) public {

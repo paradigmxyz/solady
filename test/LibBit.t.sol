@@ -353,6 +353,12 @@ contract LibBitTest is SoladyTest {
         assertEq(LibBit.toNibbles(s1), expected1);
     }
 
+    function testToNibblesDirtyPadding() public {
+        testToNibblesDifferential(
+            2, hex"e8d52269524e442c43b00b08584f8bd9b21c997bb5bf0fbaf022aea187f5267e4795f4a464a2ebc8"
+        );
+    }
+
     function testToNibblesDifferential(uint256 r, bytes memory s) public {
         if (r & 0x01 == 0) {
             _brutalizeMemory();

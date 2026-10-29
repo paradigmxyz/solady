@@ -106,31 +106,29 @@ library WebAuthn {
         WebAuthnAuth memory auth,
         bytes32 x,
         bytes32 y
-    ) internal view returns (bool result) {
-        bytes32 messageHash;
+    ) internal view returns (bool) {
         string memory encoded = Base64.encode(challenge, true, true);
         bytes memory clientDataJSON = bytes(auth.clientDataJSON);
         // 11. Verify JSON's type. Also checks for possible addition overflows.
         // 12. Verify JSON's challenge. Includes a check for the closing '"'.
-        result =
-            _checkClientData(clientDataJSON, auth.challengeIndex, auth.typeIndex, bytes(encoded));
+        if (!_checkClientData(clientDataJSON, auth.challengeIndex, auth.typeIndex, bytes(encoded)))
+        {
+            return false;
+        }
         // Skip 13., 14., 15.
         bytes memory authenticatorData = auth.authenticatorData;
         // 16. Verify that the "User Present" flag is set (bit 0).
         // 17. Verify that the "User Verified" flag is set (bit 2), if required.
         // See: https://www.w3.org/TR/webauthn-2/#flags.
         uint256 u = requireUserVerification ? 5 : 1;
-        result =
-            result && authenticatorData.length > 0x20 && (uint8(authenticatorData[0x20]) & u) == u;
-        if (result) {
-            {
-                // 19. Compute `sha256(clientDataJSON)`.
-                // 20. Compute `sha256(authenticatorData ‖ sha256(clientDataJSON))`.
-                messageHash = sha256(abi.encodePacked(authenticatorData, sha256(clientDataJSON)));
-            }
+        if (authenticatorData.length <= 0x20 || (uint8(authenticatorData[0x20]) & u) != u) {
+            return false;
         }
+        // 19. Compute `sha256(clientDataJSON)`.
+        // 20. Compute `sha256(authenticatorData ‖ sha256(clientDataJSON))`.
+        bytes32 messageHash = sha256(abi.encodePacked(authenticatorData, sha256(clientDataJSON)));
         // `P256.verifySignature` returns false if `s > N/2` due to the malleability check.
-        if (result) result = P256.verifySignature(messageHash, auth.r, auth.s, x, y);
+        return P256.verifySignature(messageHash, auth.r, auth.s, x, y);
     }
 
     /// @dev Plain variant of verify.
@@ -302,12 +300,13 @@ library WebAuthn {
         uint256 l = encoded.length;
         if ((t | c) >> 128 != 0 || n < 21 || t > n - 21) return false; // `t + 0x14 < n`.
         uint256 q = l + 0x0d; // Length of `encoded` prefixed with '"challenge":"'.
-        if (q + c >= n) return false;
+        uint256 end = q + c;
+        if (end >= n) return false;
         if (_readBytesN(clientDataJSON, t, 21) != bytes32('"type":"webauthn.get"')) return false;
         if (l < 0x20) {
             return _readBytesN(clientDataJSON, c, 13) == bytes32('"challenge":"')
                 && _readBytesN(clientDataJSON, c + 13, l) == _readBytesN(encoded, 0, l)
-                && clientDataJSON[c + q] == '"';
+                && clientDataJSON[end] == '"';
         }
         // The `q + 1` bytes from `c` a word at a time: the first word is the prefix and the
         // start of `encoded`, the last ends with the closing quote.
@@ -317,7 +316,7 @@ library WebAuthn {
             if (_readBytes32(clientDataJSON, c + k) != _readBytes32(encoded, k - 13)) return false;
         }
         bytes32 last = (_readBytes32(encoded, l - 0x20) << 8) | bytes32(uint256(0x22));
-        return _readBytes32(clientDataJSON, c + q - 31) == last;
+        return _readBytes32(clientDataJSON, end - 31) == last;
     }
 
     /// @dev The six words of the encoded tuple at `p` in `encodedAuth`, which lie in it.

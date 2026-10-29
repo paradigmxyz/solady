@@ -193,11 +193,11 @@ library LibBit {
         // the first `2 * n` bytes. An empty input has none to spread.
         if (n < 16) {
             if (n == 0) return "";
-            result = new bytes(n * 2);
+            result = _newBytes(n * 2);
             _writeBytesN(result, bytes32(_spread(uint256(bytes32(s)) >> 128)), n * 2);
             return result;
         }
-        result = new bytes(n * 2);
+        result = _newBytes(n * 2);
         uint256 i;
         uint256 o;
         // Sixteen input bytes make one word of output. The spreading is
@@ -378,5 +378,13 @@ library LibBit {
         for (uint256 k; k < 32; ++k) {
             result |= bytes32(b[offset + k]) >> (8 * k);
         }
+    }
+
+    /// @dev Allocates bytes with zero right padding, including over dirty memory.
+    /// Legacy solc only zeroes the logical length of `new bytes(n)`.
+    /// @custom:solar-inline
+    function _newBytes(uint256 n) private pure returns (bytes memory) {
+        if (n & 31 == 0) return new bytes(n);
+        return abi.decode(abi.encode(new bytes(n)), (bytes));
     }
 }

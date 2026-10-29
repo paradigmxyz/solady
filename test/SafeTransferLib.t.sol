@@ -796,15 +796,9 @@ contract SafeTransferLibTest is SoladyTest {
 
     function forceApprove(address token, address from, address to, uint256 amount) public {
         if (token == address(erc20)) {
-            bytes32 allowanceSlot;
-            /// @solidity memory-safe-assembly
-            assembly {
-                mstore(0x20, to)
-                mstore(0x0c, 0x7f5e9f20) // `_ALLOWANCE_SLOT_SEED`.
-                mstore(0x00, from)
-                allowanceSlot := keccak256(0x0c, 0x34)
-            }
-            vm.store(token, allowanceSlot, bytes32(uint256(amount)));
+            // The safe ERC20 uses Solidity-managed storage, not upstream's hashed allowance slot.
+            vm.prank(from);
+            erc20.approve(to, amount);
         } else {
             vm.store(
                 token,
