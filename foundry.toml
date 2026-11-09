@@ -54,7 +54,7 @@ lint_on_build = false
 
 [fmt]
 line_length = 100 # While we allow up to 120, we lint at 100 for readability.
-ignore = ["src/accounts/EIP7702Proxy.sol"]
+ignore = ["src/accounts/EIP7702Proxy.sol", "src/solar-core/Bytes.sol"]
 
 [profile.default.fuzz]
 runs = 256

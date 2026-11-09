@@ -2,6 +2,7 @@
 pragma solidity ^0.8.5;
 
 import {LibBytes} from "./LibBytes.sol";
+import {Bytes} from "solar:core/Bytes.sol";
 
 /// @notice Library to encode strings in Base64.
 /// @author Solady (https://github.com/vectorized/solady/blob/main/src/utils/Base64.sol)
@@ -321,17 +322,13 @@ library Base64 {
     /// @dev The 24 bytes of `b` at `offset`.
     /// @custom:solar-inline always
     function _readBytes24(bytes memory b, uint256 offset) private pure returns (bytes24 result) {
-        for (uint256 k; k < 24; ++k) {
-            result |= bytes24(b[offset + k]) >> (8 * k);
-        }
+        return Bytes.readBytes24(b, offset);
     }
 
     /// @dev The 32 bytes of `b` at `offset`.
     /// @custom:solar-inline always
     function _readBytes32(bytes memory b, uint256 offset) private pure returns (bytes32 result) {
-        for (uint256 k; k < 32; ++k) {
-            result |= bytes32(b[offset + k]) >> (8 * k);
-        }
+        return Bytes.readBytes32(b, offset);
     }
 
     /// @dev The leading `count` bytes of `b` from `offset`, at most a word, left-aligned.
