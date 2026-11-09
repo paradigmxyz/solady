@@ -35,6 +35,7 @@ from benchmark import (
     ROOT,
     Cache,
     closure,
+    core_sources,
     default_cache_dir,
     digest,
     file_sha256,
@@ -513,6 +514,22 @@ def run(args):
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(text)
             hashes[name] = digest(text.encode())
+        if safe:
+            available = {
+                path.relative_to(ROOT).as_posix(): {"content": path.read_text()}
+                for path in sorted((ROOT / "src").rglob("*.sol"))
+            }
+            available.update(
+                {name: {"content": (folder / name).read_text()} for name in sources}
+            )
+            available.update(core_sources())
+            for name, source in closure(available, sources).items():
+                if name.startswith("solar:core/"):
+                    name = "src/solar-core/" + name.removeprefix("solar:core/")
+                path = folder / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(source["content"])
+                hashes[name] = digest(source["content"].encode())
         applied = apply_fair_patches(folder) if args.fair else []
         hashes = {name: digest((folder / name).read_bytes()) for name in hashes}
         # Test data the suites read, such as P256's Wycheproof vectors, as the pinned
@@ -526,7 +543,7 @@ def run(args):
             'evm_version = "cancun"\noptimizer = true\noptimizer_runs = 200\n'
             f'via_ir = {"false" if args.legacy else "true"}\nbytecode_hash = "none"\n'
             'cbor_metadata = false\n'
-            'gas_limit = 100000000\nremappings = ["forge-std/=test/utils/forge-std/"]\n'
+            'gas_limit = 100000000\nremappings = ["forge-std/=test/utils/forge-std/", "src/:solar:core/=src/solar-core/"]\n'
             'fs_permissions = [{ access = "read", path = "./test/data" }]\n'
             f'[profile.default.fuzz]\nruns = {args.fuzz_runs}\nseed = "0x20260910"\n'
             + ("dictionary_weight = 0\n" if args.fair else "")

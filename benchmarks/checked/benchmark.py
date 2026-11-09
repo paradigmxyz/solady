@@ -321,6 +321,15 @@ def closure(sources, roots):
     return result
 
 
+def core_sources():
+    """Load vendored core modules at their compiler-owned import names for solc too."""
+    directory = ROOT / "src/solar-core"
+    return {
+        "solar:core/" + path.relative_to(directory).as_posix(): {"content": path.read_text()}
+        for path in sorted(directory.rglob("*.sol"))
+    }
+
+
 def opcode_gas(logs) -> int:
     """Opcode gas the call spent, excluding the transaction's intrinsic gas.
 
@@ -447,8 +456,11 @@ def prepare(
         overridden[path] = digest(content.encode())
     safe = closure(
         {
-            p.relative_to(ROOT).as_posix(): {"content": p.read_text()}
-            for p in sorted((ROOT / "src").rglob("*.sol"))
+            **core_sources(),
+            **{
+                p.relative_to(ROOT).as_posix(): {"content": p.read_text()}
+                for p in sorted((ROOT / "src").rglob("*.sol"))
+            },
         },
         [f"src/utils/{name}.sol" for name in CHECKED_LIBRARIES],
     )

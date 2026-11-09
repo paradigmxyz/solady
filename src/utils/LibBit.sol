@@ -1,16 +1,17 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.5;
 
+import {Bits} from "solar:core/Bits.sol";
+
 import {LibBytes} from "./LibBytes.sol";
 
 /// @notice Library for bit twiddling and boolean operations.
 /// @author Solady (https://github.com/vectorized/solady/blob/main/src/utils/LibBit.sol)
 /// @author Inspired by (https://graphics.stanford.edu/~seander/bithacks.html)
 /// @dev The checked port spells the bit tricks in Solidity. Raw boolean operations require
-/// clean boolean inputs, as upstream's do. The bit scans find the byte holding the highest set
-/// bit with five comparisons and finish inside it with a table. The population and zero-byte
-/// counts sum their lanes through a product that wraps, and `ffs` negates by multiplying with
-/// `2**256 - 1`: only the trusted `_rawMul` may wrap.
+/// clean boolean inputs, as upstream's do. The bit scans use the portable core bodies, which the
+/// compiler replaces with native instructions when the target supports them. Population and
+/// zero-byte counts sum their lanes through a wrapping product in the trusted `_rawMul`.
 /// @custom:solar-safe memory arithmetic
 library LibBit {
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
@@ -22,29 +23,14 @@ library LibBit {
     /// counting from the least significant bit position.
     /// If `x` is zero, returns 256.
     function fls(uint256 x) internal pure returns (uint256 r) {
-        // Zero is seeded with 256: every comparison is then false and its
-        // slot contributes nothing.
-        r = (x == 0 ? 256 : 0) | (x > type(uint128).max ? 128 : 0);
-        r |= (x >> r) > type(uint64).max ? 64 : 0;
-        r |= (x >> r) > type(uint32).max ? 32 : 0;
-        r |= (x >> r) > type(uint16).max ? 16 : 0;
-        r |= (x >> r) > type(uint8).max ? 8 : 0;
-        r |= uint8(_HIGHEST[(_SELECTOR >> (x >> r)) & 31]);
+        return Bits.highestSetBit(x);
     }
 
     /// @dev Count leading zeros.
     /// Returns the number of zeros preceding the most significant one bit.
     /// If `x` is zero, returns 256.
     function clz(uint256 x) internal pure returns (uint256 r) {
-        // The same search as `fls`. `r` only holds bits at or above three and
-        // the slot value has all of those set, so the exclusive-or subtracts.
-        // Zero reaches the last slot, 255, and the final term makes it 256.
-        r = x > type(uint128).max ? 128 : 0;
-        r |= (x >> r) > type(uint64).max ? 64 : 0;
-        r |= (x >> r) > type(uint32).max ? 32 : 0;
-        r |= (x >> r) > type(uint16).max ? 16 : 0;
-        r |= (x >> r) > type(uint8).max ? 8 : 0;
-        r = (r ^ uint8(_LEADING[(_SELECTOR >> (x >> r)) & 31])) + (x == 0 ? 1 : 0);
+        return Bits.leadingZeros(x);
     }
 
     /// @dev Find first set.
@@ -54,27 +40,7 @@ library LibBit {
     /// Equivalent to `ctz` (count trailing zeros), which gives
     /// the number of zeros following the least significant one bit.
     function ffs(uint256 x) internal pure returns (uint256 r) {
-        // Isolate the lowest set bit: `x * (2**256 - 1)` is `-x` modulo `2**256`.
-        // A zero stays zero, which the lookups below map to 256.
-        x &= _rawMul(x, type(uint256).max);
-        // The upper three bits of the index come from a De Bruijn-like lookup of
-        // the product's top six bits (credit to adhusson,
-        // https://blog.adhusson.com/cheap-find-first-set-evm/), the lower five
-        // from a De Bruijn lookup of the bit within its 32-bit lane.
-        r =
-            ((uint256(0x8040405543005266443200005020610674053026020000107506200176117077)
-                        << ((_rawMul(
-                                    x,
-                                    0xb6db6db6ddddddddd34d34d349249249210842108c6318c639ce739cffffffff
-                                )
-                                >> 250)
-                            << 2))
-                    >> 252) << 5;
-        r |= uint8(
-            bytes32(
-                0x00011c021d0e18031e16140f191104081f1b0d17151310071a0c12060b050a09
-            )[(_rawMul(x >> r, 0x077cb531) >> 27) & 0x1f]
-        );
+        return Bits.trailingZeros(x);
     }
 
     /// @dev Returns the number of set bits in `x`.
@@ -289,20 +255,6 @@ library LibBit {
     /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
     /*                      PRIVATE HELPERS                       */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
-
-    /// @dev Selects a table slot from a byte value: shifted right by the byte
-    /// and masked to five bits, it gives a distinct slot for each position the
-    /// byte's highest set bit can have, and slot 30 for a zero byte.
-    uint256 private constant _SELECTOR = 0x8421084210842108cc6318c6db6d54be;
-
-    /// @dev The highest set bit's index within a byte, per selector slot.
-    bytes32 private constant _HIGHEST =
-        0x0706060506020504060203020504030106050205030304010505030400000000;
-
-    /// @dev The same table complemented to 255, so that a leading-zero count
-    /// is the byte position exclusive-ored with the slot.
-    bytes32 private constant _LEADING =
-        0xf8f9f9faf9fdfafbf9fdfcfdfafbfcfef9fafdfafcfcfbfefafafcfbffffffff;
 
     /// @dev Nibble-spreading masks, one per halving of the packing.
     uint256 private constant _MASK_64 =

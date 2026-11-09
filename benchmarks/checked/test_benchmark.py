@@ -18,6 +18,31 @@ import port_audit
 import upstream_tests
 
 
+class CoreModuleTests(unittest.TestCase):
+    def test_nested_core_imports_use_exact_vendored_sources(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            modules = root / "src/solar-core"
+            modules.mkdir(parents=True)
+            bits = "library Bits {}"
+            math = 'import {Bits} from "solar:core/Bits.sol"; library Math {}'
+            (modules / "Bits.sol").write_text(bits)
+            (modules / "Math.sol").write_text(math)
+            with mock.patch.object(benchmark, "ROOT", root):
+                sources = benchmark.core_sources()
+            sources["src/Test.sol"] = {
+                "content": 'import {Math} from "solar:core/Math.sol";'
+            }
+            self.assertEqual(
+                benchmark.closure(sources, ["src/Test.sol"]),
+                {
+                    "src/Test.sol": sources["src/Test.sol"],
+                    "solar:core/Math.sol": {"content": math},
+                    "solar:core/Bits.sol": {"content": bits},
+                },
+            )
+
+
 class ComparisonTests(unittest.TestCase):
     def setUp(self):
         self.case = {
