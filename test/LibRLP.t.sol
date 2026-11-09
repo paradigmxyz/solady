@@ -410,8 +410,8 @@ contract LibRLPTest is SoladyTest {
 
     function _encodeSimple(bytes memory x, uint256 c) internal pure returns (bytes memory) {
         uint256 n = x.length;
-        if (n == 0) return hex"80";
-        if (n == 1 && uint8(bytes1(x[0])) < 0x80) return x;
+        if (n == 0) return abi.encodePacked(uint8(c));
+        if (c == 0x80 && n == 1 && uint8(bytes1(x[0])) < 0x80) return x;
         if (n < 56) return abi.encodePacked(uint8(n + c), x);
         bytes memory ep = _ep(n);
         return abi.encodePacked(uint8(c + 55 + ep.length), ep, x);
@@ -690,5 +690,14 @@ contract LibRLPTest is SoladyTest {
         }
         child.p("dog");
         assertEq(parent.encode(), hex"cac9010203040583646f67");
+    }
+
+    function testRLPReferenceListPrefixes() public {
+        assertEq(_encodeSimple(hex"", 0xc0), hex"c0");
+        assertEq(_encodeSimple(hex"00", 0xc0), hex"c100");
+        assertEq(_encodeSimple(hex"7f", 0xc0), hex"c17f");
+        assertEq(_encodeSimple(hex"", 0x80), hex"80");
+        assertEq(_encodeSimple(hex"00", 0x80), hex"00");
+        assertEq(_encodeSimple(hex"7f", 0x80), hex"7f");
     }
 }
